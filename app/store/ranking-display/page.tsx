@@ -12,8 +12,34 @@ type RankingItem = {
 const TOP_CARD_COLORS = ["#FFD700", "#C0C0C0", "#CD7F32", "#3b82f6", "#22c55e"]
 const FIXED_COLUMN_COUNT = 7
 
+function useCurrentTime() {
+  const [now, setNow] = useState<Date | null>(null)
+
+  useEffect(() => {
+    setNow(new Date())
+    const id = window.setInterval(() => setNow(new Date()), 1000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  return now
+}
+
+function formatDateTime(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0")
+  const year = date.getFullYear()
+  const month = pad(date.getMonth() + 1)
+  const day = pad(date.getDate())
+  const hours = pad(date.getHours())
+  const minutes = pad(date.getMinutes())
+  const seconds = pad(date.getSeconds())
+  const weekdays = ["일", "월", "화", "수", "목", "금", "토"]
+  const weekday = weekdays[date.getDay()]
+  return `${year}.${month}.${day} (${weekday}) ${hours}:${minutes}:${seconds}`
+}
+
 export default function RankingDisplay() {
   const [ranking, setRanking] = useState<RankingItem[]>([])
+  const now = useCurrentTime()
 
   const fetchRanking = useCallback(async () => {
     try {
@@ -64,17 +90,33 @@ export default function RankingDisplay() {
         fontFamily: "Pretendard, sans-serif",
       }}
     >
-      <h1
-        style={{
-          textAlign: "center",
-          fontSize: "60px",
-          margin: "0 0 18px",
-          letterSpacing: "3px",
-          lineHeight: 1.1,
-        }}
-      >
-        우리 매장 순위
-      </h1>
+      <div style={{ position: "relative", marginBottom: "18px" }}>
+        <h1
+          style={{
+            textAlign: "center",
+            fontSize: "60px",
+            margin: 0,
+            letterSpacing: "3px",
+            lineHeight: 1.1,
+          }}
+        >
+          우리 매장 순위
+        </h1>
+        <div
+          style={{
+            position: "absolute",
+            top: "50%",
+            right: 0,
+            transform: "translateY(-50%)",
+            fontSize: "22px",
+            color: "#94a3b8",
+            fontVariantNumeric: "tabular-nums",
+            letterSpacing: "1px",
+          }}
+        >
+          {now ? formatDateTime(now) : ""}
+        </div>
+      </div>
 
       <div
         style={{
