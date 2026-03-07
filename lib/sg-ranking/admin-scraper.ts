@@ -1,4 +1,5 @@
-import puppeteer, { Browser, Page } from "puppeteer"
+import puppeteer, { Browser, Page } from "puppeteer-core"
+import chromium from "@sparticuz/chromium"
 
 export type PlayerRecord = {
   nickname: string
@@ -103,17 +104,15 @@ export async function scrapeMonthlyPlayers(
   let browser: Browser | null = null
 
   try {
+    const executablePath = await chromium.executablePath()
+
     browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-      ],
+      args: chromium.args,
+      executablePath,
+      headless: "shell",
     })
 
     const page = await browser.newPage()
-    await page.setViewport({ width: 1280, height: 800 })
 
     await login(page, id, password)
     await page.goto(
