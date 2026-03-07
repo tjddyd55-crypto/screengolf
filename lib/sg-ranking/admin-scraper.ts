@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from "axios"
 import * as cheerio from "cheerio"
+import type { AnyNode } from "domhandler"
 
 export type PlayerRecord = {
   nickname: string
@@ -13,6 +14,12 @@ const MEMBER_LIST_URL =
 const REQUEST_TIMEOUT_MS = 20000
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+const LOGIN_FAILURE_MARKERS = [
+  "로그인",
+  "아이디 또는 비밀번호",
+  "userId",
+  "userPw",
+]
 
 function getAdminCredentials(): { id: string; password: string } {
   const id = process.env.SG_ADMIN_ID ?? process.env.SG_ID
@@ -33,6 +40,13 @@ function normalizeCookie(setCookieHeaders: string[] | undefined): string {
   }
 
   return setCookieHeaders.map((cookie) => cookie.split(";")[0]).join("; ")
+}
+
+function isLikelyLoginPage(html: string): boolean {
+  const normalized = html.toLowerCase()
+  return LOGIN_FAILURE_MARKERS.some((marker) =>
+    normalized.includes(marker.toLowerCase()),
+  )
 }
 
 async function sgLogin(
@@ -67,11 +81,38 @@ async function sgLogin(
   })
 
   const html = String(mainResponse.data)
-  if (html.includes("login") && html.includes("userId")) {
+  if (isLikelyLoginPage(html)) {
     throw new Error("관리자 로그인 실패: 아이디 또는 비밀번호를 확인하세요.")
   }
 
   return sessionCookie
+}
+
+function extractNickname(cells: cheerio.Cheerio<AnyNode>): string {
+  const first = cells.eq(1).text().trim()
+  if (first) {
+    return first
+  }
+
+  return cells.eq(2).text().trim()
+}
+
+function extractHandicap(cells: cheerio.Cheerio<AnyNode>): number {
+  const candidates = [cells.eq(3).text().trim(), cells.eq(4).text().trim()]
+
+  for (const text of candidates) {
+    const normalized = text.replace(/,/g, "")
+    const value = Number.parseFloat(normalized)
+    if (!Number.isNaN(value)) {
+      return value
+    }
+  }
+
+  return Number.NaN
+}
+
+function extractRoundDate(cells: cheerio.Cheerio<AnyNode>): string {
+  return cells.eq(5).text().trim() || cells.eq(6).text().trim()
 }
 
 function parseMembers(html: string): PlayerRecord[] {
@@ -80,18 +121,19 @@ function parseMembers(html: string): PlayerRecord[] {
 
   $("table tbody tr").each((_, row) => {
     const cells = $(row).find("td")
-    const nickname = cells.eq(1).text().trim()
-    const handicapText = cells.eq(3).text().trim().replace(/,/g, "")
-    const roundDate = cells.eq(5).text().trim()
-    const handicap = Number.parseFloat(handicapText)
+    const nickname = extractNickname(cells)
+    const handicap = extractHandicap(cells)
+    const roundDate = extractRoundDate(cells)
 
-    if (nickname && !Number.isNaN(handicap)) {
-      players.push({
-        nickname,
-        handicap,
-        roundDate,
-      })
+    if (!nickname || Number.isNaN(handicap)) {
+      return
     }
+
+    players.push({
+      nickname,
+      handicap,
+      roundDate,
+    })
   })
 
   return players
@@ -103,7 +145,7 @@ function parseTotalPages(html: string): number {
 
   $(".pagination a").each((_, link) => {
     const href = $(link).attr("href") ?? ""
-    const match = href.match(/pageIndex=(\d+)/)
+    const match = href.match(/(?:pageIndex|page)=(\d+)/)
     if (!match) {
       return
     }
@@ -140,7 +182,12 @@ async function fetchMemberPageHtml(
     responseType: "text",
   })
 
-  return String(response.data)
+  const html = String(response.data)
+  if (isLikelyLoginPage(html)) {
+    throw new Error("세션 만료 또는 권한 문제로 회원 목록 조회에 실패했습니다.")
+  }
+
+  return html
 }
 
 export async function scrapeMonthlyPlayers(
