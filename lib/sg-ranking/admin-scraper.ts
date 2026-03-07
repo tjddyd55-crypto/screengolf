@@ -1,5 +1,5 @@
-import puppeteer, { Browser, Page } from "puppeteer-core"
-import chromium from "@sparticuz/chromium"
+import axios, { AxiosInstance } from "axios"
+import * as cheerio from "cheerio"
 
 export type PlayerRecord = {
   nickname: string
@@ -7,87 +7,140 @@ export type PlayerRecord = {
   roundDate: string
 }
 
-const LOGIN_URL = "https://smanager.sggolf.com/login"
+const LOGIN_URL = "https://screen.sggolf.com/login/form"
 const MEMBER_LIST_URL =
   "https://smanager.sggolf.com/memberInfo/userList?menuId=43&parentId=36"
+const REQUEST_TIMEOUT_MS = 20000
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
 
 function getAdminCredentials(): { id: string; password: string } {
-  const id = process.env.SG_ADMIN_ID
-  const password = process.env.SG_ADMIN_PASSWORD
+  const id = process.env.SG_ADMIN_ID ?? process.env.SG_ID
+  const password = process.env.SG_ADMIN_PASSWORD ?? process.env.SG_PASSWORD
 
   if (!id || !password) {
     throw new Error(
-      "SG_ADMIN_ID 또는 SG_ADMIN_PASSWORD 환경변수가 설정되지 않았습니다.",
+      "SG_ADMIN_ID/SG_ID 또는 SG_ADMIN_PASSWORD/SG_PASSWORD 환경변수가 설정되지 않았습니다.",
     )
   }
 
   return { id, password }
 }
 
-async function login(page: Page, id: string, password: string): Promise<void> {
-  await page.goto(LOGIN_URL, { waitUntil: "networkidle2" })
-
-  await page.type('input[name="userId"]', id)
-  await page.type('input[name="userPw"]', password)
-  await page.click('button[type="submit"]')
-
-  await page.waitForNavigation({ waitUntil: "networkidle2" })
-
-  const currentUrl = page.url()
-  if (currentUrl.includes("login")) {
-    throw new Error("관리자 로그인 실패: 아이디 또는 비밀번호를 확인하세요.")
+function normalizeCookie(setCookieHeaders: string[] | undefined): string {
+  if (!setCookieHeaders || setCookieHeaders.length === 0) {
+    throw new Error("로그인 실패: 세션 쿠키를 받지 못했습니다.")
   }
+
+  return setCookieHeaders.map((cookie) => cookie.split(";")[0]).join("; ")
 }
 
-async function fetchPageRecords(
-  page: Page,
-  startDate: string,
-  endDate: string,
-  pageIndex: number,
-): Promise<PlayerRecord[]> {
-  const url = `${MEMBER_LIST_URL}&startDate=${startDate}&endDate=${endDate}&pageIndex=${pageIndex}`
-  await page.goto(url, { waitUntil: "networkidle2" })
-
-  const records = await page.evaluate(() => {
-    const rows = Array.from(document.querySelectorAll("table tbody tr"))
-    return rows
-      .map((row) => {
-        const cells = Array.from(row.querySelectorAll("td"))
-        const nickname = cells[1]?.textContent?.trim() ?? ""
-        const handicapText = cells[3]?.textContent?.trim() ?? ""
-        const roundDate = cells[5]?.textContent?.trim() ?? ""
-        const handicap = parseFloat(handicapText)
-
-        if (!nickname || isNaN(handicap)) return null
-
-        return { nickname, handicap, roundDate }
-      })
-      .filter((r): r is PlayerRecord => r !== null)
+async function sgLogin(
+  client: AxiosInstance,
+  id: string,
+  password: string,
+): Promise<string> {
+  const body = new URLSearchParams({
+    userId: id,
+    password,
   })
 
-  return records
+  const response = await client.post(LOGIN_URL, body.toString(), {
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": USER_AGENT,
+      Referer: LOGIN_URL,
+    },
+    withCredentials: true,
+    validateStatus: (status) => status >= 200 && status < 400,
+  })
+
+  const sessionCookie = normalizeCookie(response.headers["set-cookie"])
+
+  const mainResponse = await client.get("https://smanager.sggolf.com/main", {
+    headers: {
+      Cookie: sessionCookie,
+      "User-Agent": USER_AGENT,
+      Referer: LOGIN_URL,
+    },
+    responseType: "text",
+  })
+
+  const html = String(mainResponse.data)
+  if (html.includes("login") && html.includes("userId")) {
+    throw new Error("관리자 로그인 실패: 아이디 또는 비밀번호를 확인하세요.")
+  }
+
+  return sessionCookie
 }
 
-async function getTotalPages(page: Page): Promise<number> {
-  const total = await page.evaluate(() => {
-    const paginationText =
-      document.querySelector(".pagination-info")?.textContent ?? ""
-    const match = paginationText.match(/(\d+)\s*\/\s*(\d+)/)
-    if (match) return parseInt(match[2], 10)
+function parseMembers(html: string): PlayerRecord[] {
+  const $ = cheerio.load(html)
+  const players: PlayerRecord[] = []
 
-    const lastPageLink = document.querySelector(
-      ".pagination a:last-child",
-    ) as HTMLAnchorElement | null
-    if (lastPageLink) {
-      const href = lastPageLink.href
-      const pageMatch = href.match(/pageIndex=(\d+)/)
-      if (pageMatch) return parseInt(pageMatch[1], 10)
+  $("table tbody tr").each((_, row) => {
+    const cells = $(row).find("td")
+    const nickname = cells.eq(1).text().trim()
+    const handicapText = cells.eq(3).text().trim().replace(/,/g, "")
+    const roundDate = cells.eq(5).text().trim()
+    const handicap = Number.parseFloat(handicapText)
+
+    if (nickname && !Number.isNaN(handicap)) {
+      players.push({
+        nickname,
+        handicap,
+        roundDate,
+      })
+    }
+  })
+
+  return players
+}
+
+function parseTotalPages(html: string): number {
+  const $ = cheerio.load(html)
+  let total = 1
+
+  $(".pagination a").each((_, link) => {
+    const href = $(link).attr("href") ?? ""
+    const match = href.match(/pageIndex=(\d+)/)
+    if (!match) {
+      return
     }
 
-    return 1
+    const pageIndex = Number.parseInt(match[1], 10)
+    if (Number.isFinite(pageIndex) && pageIndex > total) {
+      total = pageIndex
+    }
   })
 
   return total
+}
+
+async function fetchMemberPageHtml(
+  client: AxiosInstance,
+  cookie: string,
+  startDate: string,
+  endDate: string,
+  pageIndex: number,
+): Promise<string> {
+  const response = await client.get(MEMBER_LIST_URL, {
+    headers: {
+      Cookie: cookie,
+      "User-Agent": USER_AGENT,
+      Referer: "https://smanager.sggolf.com/main",
+    },
+    params: {
+      menuId: 43,
+      parentId: 36,
+      startDate,
+      endDate,
+      pageIndex,
+    },
+    responseType: "text",
+  })
+
+  return String(response.data)
 }
 
 export async function scrapeMonthlyPlayers(
@@ -95,53 +148,37 @@ export async function scrapeMonthlyPlayers(
   month: number,
 ): Promise<PlayerRecord[]> {
   const { id, password } = getAdminCredentials()
+  const client = axios.create({
+    timeout: REQUEST_TIMEOUT_MS,
+    withCredentials: true,
+  })
 
   const pad = (n: number) => String(n).padStart(2, "0")
   const startDate = `${year}-${pad(month)}-01`
   const lastDay = new Date(year, month, 0).getDate()
   const endDate = `${year}-${pad(month)}-${pad(lastDay)}`
 
-  let browser: Browser | null = null
+  const cookie = await sgLogin(client, id, password)
+  const firstPageHtml = await fetchMemberPageHtml(
+    client,
+    cookie,
+    startDate,
+    endDate,
+    1,
+  )
+  const totalPages = parseTotalPages(firstPageHtml)
+  const allRecords: PlayerRecord[] = [...parseMembers(firstPageHtml)]
 
-  try {
-    browser = await puppeteer.launch({
-      args: [
-        ...chromium.args,
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--single-process",
-      ],
-      executablePath: await chromium.executablePath(),
-      headless: true,
-    })
-
-    const page = await browser.newPage()
-
-    await login(page, id, password)
-    await page.goto(
-      `${MEMBER_LIST_URL}&startDate=${startDate}&endDate=${endDate}&pageIndex=1`,
-      { waitUntil: "networkidle2" },
+  for (let pageIndex = 2; pageIndex <= totalPages; pageIndex += 1) {
+    const html = await fetchMemberPageHtml(
+      client,
+      cookie,
+      startDate,
+      endDate,
+      pageIndex,
     )
-
-    const totalPages = await getTotalPages(page)
-    const allRecords: PlayerRecord[] = []
-
-    for (let pageIndex = 1; pageIndex <= totalPages; pageIndex++) {
-      const records = await fetchPageRecords(
-        page,
-        startDate,
-        endDate,
-        pageIndex,
-      )
-      allRecords.push(...records)
-    }
-
-    return allRecords
-  } finally {
-    if (browser) {
-      await browser.close()
-    }
+    allRecords.push(...parseMembers(html))
   }
+
+  return allRecords
 }

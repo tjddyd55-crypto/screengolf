@@ -9,11 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@sparticuz/chromium": "^123.0.1",
     "axios": "^1.13.5",
     "cheerio": "^1.2.0",
     "next": "16.1.6",
-    "puppeteer-core": "^22.15.0",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
