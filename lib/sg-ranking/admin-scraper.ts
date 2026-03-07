@@ -104,12 +104,14 @@ export async function scrapeMonthlyPlayers(
   let browser: Browser | null = null
 
   try {
-    const executablePath = await chromium.executablePath()
-
     browser = await puppeteer.launch({
-      args: chromium.args,
-      executablePath,
-      headless: "shell",
+      args: [
+        ...chromium.args,
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+      ],
+      executablePath: await chromium.executablePath(),
+      headless: true,
     })
 
     const page = await browser.newPage()
