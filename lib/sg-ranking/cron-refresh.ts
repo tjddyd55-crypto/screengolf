@@ -2,6 +2,8 @@ import { scrapeMonthlyPlayers } from "./admin-scraper"
 import { generateRanking, takeTop } from "./ranking-generator"
 import {
   setLastMonthCache,
+  getLastMonthSnapshot,
+  setLastMonthSnapshot,
   setCurrentMonthCache,
   getLastRefreshedAt,
 } from "./ranking-cache"
@@ -24,19 +26,25 @@ export async function refreshRankingCache(): Promise<void> {
   )
 
   try {
-    const [currentPlayers, lastPlayers] = await Promise.all([
-      scrapeMonthlyPlayers(currentYear, currentMonth),
-      scrapeMonthlyPlayers(lastYear, lastMonth),
-    ])
+    const currentPlayers = await scrapeMonthlyPlayers(currentYear, currentMonth)
+    const lastMonthSnapshot = getLastMonthSnapshot(lastYear, lastMonth)
 
     const currentRanking = generateRanking(currentPlayers)
-    const lastRanking = generateRanking(lastPlayers)
-
     setCurrentMonthCache(currentYear, currentMonth, currentRanking)
-    setLastMonthCache(lastYear, lastMonth, takeTop(lastRanking, 5))
+
+    let lastMonthTop5 = lastMonthSnapshot?.top5 ?? null
+    if (!lastMonthTop5) {
+      const lastPlayers = await scrapeMonthlyPlayers(lastYear, lastMonth)
+      const lastRanking = generateRanking(lastPlayers)
+      lastMonthTop5 = takeTop(lastRanking, 5)
+      setLastMonthSnapshot(lastYear, lastMonth, lastMonthTop5)
+      console.log(`[cron-refresh] 지난달 TOP5 스냅샷 고정 완료 (${lastYear}-${lastMonth})`)
+    } else {
+      setLastMonthCache(lastYear, lastMonth, lastMonthTop5)
+    }
 
     console.log(
-      `[cron-refresh] 갱신 완료 - 현재월: ${currentRanking.length}명, 지난달 TOP5: ${takeTop(lastRanking, 5).length}명`,
+      `[cron-refresh] 갱신 완료 - 현재월: ${currentRanking.length}명, 지난달 TOP5: ${lastMonthTop5.length}명(고정)`,
     )
   } catch (error) {
     console.error("[cron-refresh] 갱신 실패, 기존 캐시 유지:", error)
