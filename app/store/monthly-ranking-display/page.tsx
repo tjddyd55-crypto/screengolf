@@ -53,6 +53,8 @@ function formatDateTime(date: Date): string {
 }
 
 function buildColumns(players: RankedPlayer[]): RankedPlayer[][] {
+  if (players.length === 0) return []
+
   const columns: RankedPlayer[][] = []
   const baseSize = Math.floor(players.length / FIXED_COLUMN_COUNT)
   const remainder = players.length % FIXED_COLUMN_COUNT
@@ -65,6 +67,10 @@ function buildColumns(players: RankedPlayer[]): RankedPlayer[][] {
   }
 
   return columns
+}
+
+function formatHandicap(value: number): string {
+  return Number(value).toFixed(1)
 }
 
 export default function MonthlyRankingDisplay() {
@@ -98,17 +104,23 @@ export default function MonthlyRankingDisplay() {
     return () => window.clearInterval(id)
   }, [fetchData])
 
-  const top5 = lastMonth?.data ?? []
+  const lastMonthTop5 = lastMonth?.data ?? []
   const currentPlayers = currentMonth?.data ?? []
-  const columns = buildColumns(currentPlayers)
+  const currentTop5 = currentPlayers.slice(0, 5)
+  const currentRest = currentPlayers.slice(5, 100)
+  const columns = buildColumns(currentRest)
 
   const lastMonthLabel = lastMonth?.month
-    ? `${lastMonth.month}월 TOP 5`
-    : "지난달 TOP 5"
+    ? `🏆 ${lastMonth.month}월 최종 랭킹 TOP5`
+    : "🏆 지난달 최종 랭킹 TOP5"
+
+  const currentTop5Label = currentMonth?.month
+    ? `🔥 ${currentMonth.month}월 LIVE TOP5`
+    : "🔥 이번달 LIVE TOP5"
 
   const currentMonthLabel = currentMonth?.month
-    ? `${currentMonth.month}월 현재 순위`
-    : "이번달 현재 순위"
+    ? `${currentMonth.month}월 전체 순위`
+    : "이번달 전체 순위"
 
   return (
     <div
@@ -126,11 +138,11 @@ export default function MonthlyRankingDisplay() {
       }}
     >
       {/* 헤더 */}
-      <div style={{ position: "relative", marginBottom: "12px", flexShrink: 0 }}>
+      <div style={{ position: "relative", marginBottom: "8px", flexShrink: 0 }}>
         <h1
           style={{
             textAlign: "center",
-            fontSize: "52px",
+            fontSize: "48px",
             margin: 0,
             letterSpacing: "3px",
             lineHeight: 1.1,
@@ -155,20 +167,21 @@ export default function MonthlyRankingDisplay() {
       </div>
 
       {/* 지난달 TOP5 */}
-      <div style={{ flexShrink: 0, marginBottom: "12px" }}>
+      <div style={{ flexShrink: 0, marginBottom: "10px" }}>
         <div
           style={{
-            fontSize: "20px",
-            color: "#facc15",
-            fontWeight: 700,
-            marginBottom: "8px",
+            fontSize: "28px",
+            fontWeight: 800,
+            color: "#FFD54A",
+            marginBottom: "10px",
             letterSpacing: "1px",
+            textAlign: "left",
           }}
         >
           {lastMonthLabel}
         </div>
 
-        {top5.length === 0 ? (
+        {lastMonthTop5.length === 0 ? (
           <div
             style={{
               textAlign: "center",
@@ -184,28 +197,32 @@ export default function MonthlyRankingDisplay() {
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(5, 1fr)",
-              gap: "12px",
+              gap: "10px",
             }}
           >
-            {top5.map((item, index) => (
+            {lastMonthTop5.map((item, index) => (
               <div
                 key={`last-${item.rank}-${item.nickname}`}
                 style={{
                   background: TOP_CARD_COLORS[index],
-                  borderRadius: "14px",
-                  padding: "16px 12px",
+                  borderRadius: "12px",
+                  padding: "12px 16px",
+                  height: "90px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
                   textAlign: "center",
                   color: index < 3 ? "black" : "white",
                   fontWeight: 700,
-                  boxShadow: "0 6px 16px rgba(0,0,0,0.22)",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
                 }}
               >
-                <div style={{ fontSize: "34px" }}>{item.rank}위</div>
-                <div style={{ fontSize: "26px", fontWeight: 400, lineHeight: 1.15 }}>
+                <div style={{ fontSize: "22px", lineHeight: 1.05 }}>{item.rank}위</div>
+                <div style={{ fontSize: "20px", fontWeight: 400, lineHeight: 1.1 }}>
                   {item.nickname}
                 </div>
-                <div style={{ fontSize: "20px" }}>
-                  핸디캡 {item.handicap.toFixed(2)}
+                <div style={{ fontSize: "17px" }}>
+                  핸디캡 {formatHandicap(item.handicap)}
                 </div>
               </div>
             ))}
@@ -213,21 +230,22 @@ export default function MonthlyRankingDisplay() {
         )}
       </div>
 
-      {/* 이번달 현재 순위 */}
+      {/* 이번달 LIVE TOP5 */}
       <div
         style={{
-          fontSize: "20px",
-          color: "#38bdf8",
+          fontSize: "26px",
           fontWeight: 700,
+          color: "#00E5FF",
+          marginTop: "10px",
           marginBottom: "8px",
           letterSpacing: "1px",
           flexShrink: 0,
         }}
       >
-        {currentMonthLabel}
+        {currentTop5Label}
       </div>
 
-      {currentPlayers.length === 0 ? (
+      {currentTop5.length === 0 ? (
         <div
           style={{
             flex: 1,
@@ -241,80 +259,147 @@ export default function MonthlyRankingDisplay() {
           이번달 이용 고객 없음
         </div>
       ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(${FIXED_COLUMN_COUNT}, minmax(0, 1fr))`,
-            gap: "10px",
-            flex: 1,
-            minHeight: 0,
-          }}
-        >
-          {columns.map((column, colIdx) => (
+        <>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(5, 1fr)",
+              gap: "10px",
+              marginBottom: "10px",
+              flexShrink: 0,
+            }}
+          >
+            {currentTop5.map((item, index) => (
+              <div
+                key={`current-top-${item.rank}-${item.nickname}`}
+                style={{
+                  background: TOP_CARD_COLORS[index],
+                  borderRadius: "12px",
+                  padding: "12px 16px",
+                  height: "95px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                  textAlign: "center",
+                  color: index < 3 ? "black" : "white",
+                  fontWeight: 700,
+                  boxShadow: "0 5px 14px rgba(0,0,0,0.2)",
+                }}
+              >
+                <div style={{ fontSize: "24px", lineHeight: 1.05 }}>{item.rank}위</div>
+                <div style={{ fontSize: "23px", fontWeight: 400, lineHeight: 1.1 }}>
+                  {item.nickname}
+                </div>
+                <div style={{ fontSize: "18px" }}>
+                  핸디캡 {formatHandicap(item.handicap)}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div
+            style={{
+              fontSize: "20px",
+              color: "#38bdf8",
+              fontWeight: 700,
+              marginBottom: "8px",
+              letterSpacing: "1px",
+              flexShrink: 0,
+            }}
+          >
+            {currentMonthLabel}
+          </div>
+
+          {currentRest.length === 0 ? (
             <div
-              key={`col-${colIdx}`}
               style={{
-                display: "grid",
-                gap: "8px",
-                minHeight: 0,
-                gridTemplateRows: `repeat(${Math.max(column.length, 1)}, minmax(0, 1fr))`,
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#64748b",
+                fontSize: "20px",
               }}
             >
-              {column.map((item) => (
+              6위 이하 데이터 없음
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: `repeat(${FIXED_COLUMN_COUNT}, minmax(0, 1fr))`,
+                gap: "10px",
+                flex: 1,
+                minHeight: 0,
+              }}
+            >
+              {columns.map((column, colIdx) => (
                 <div
-                  key={`${item.rank}-${item.nickname}`}
+                  key={`col-${colIdx}`}
                   style={{
-                    background: "#1e293b",
-                    padding: "8px 10px",
-                    borderRadius: "10px",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    border: "1px solid rgba(255,255,255,0.16)",
+                    display: "grid",
                     gap: "8px",
-                    fontSize: "16px",
-                    boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.03)",
+                    minHeight: 0,
+                    gridTemplateRows: `repeat(${Math.max(column.length, 1)}, minmax(0, 1fr))`,
                   }}
                 >
-                  <span
-                    style={{
-                      opacity: 0.82,
-                      minWidth: "48px",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {item.rank}위
-                  </span>
-                  <span
-                    style={{
-                      flex: 1,
-                      textAlign: "center",
-                      fontSize: "18px",
-                      fontWeight: 400,
-                      lineHeight: 1.1,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {item.nickname}
-                  </span>
-                  <span
-                    style={{
-                      color: "#22c55e",
-                      fontWeight: 700,
-                      minWidth: "64px",
-                      textAlign: "right",
-                      fontSize: "16px",
-                    }}
-                  >
-                    {item.handicap.toFixed(2)}
-                  </span>
+                  {column.map((item) => (
+                    <div
+                      key={`${item.rank}-${item.nickname}`}
+                      style={{
+                        background: "#1e293b",
+                        padding: "8px 10px",
+                        borderRadius: "10px",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        border: "1px solid rgba(255,255,255,0.16)",
+                        gap: "8px",
+                        fontSize: "16px",
+                        boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.03)",
+                      }}
+                    >
+                      <span
+                        style={{
+                          opacity: 0.82,
+                          minWidth: "48px",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {item.rank}위
+                      </span>
+                      <span
+                        style={{
+                          flex: 1,
+                          textAlign: "center",
+                          fontSize: "18px",
+                          fontWeight: 400,
+                          lineHeight: 1.1,
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {item.nickname}
+                      </span>
+                      <span
+                        style={{
+                          color: "#22c55e",
+                          fontWeight: 700,
+                          minWidth: "64px",
+                          textAlign: "right",
+                          fontSize: "16px",
+                        }}
+                      >
+                        {formatHandicap(item.handicap)}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
 
       {/* 하단 메시지 */}
