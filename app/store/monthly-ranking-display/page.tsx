@@ -328,7 +328,7 @@ export default function MonthlyRankingDisplay() {
               style={{
                 display: "grid",
                 gridTemplateColumns: `repeat(${FIXED_COLUMN_COUNT}, minmax(0, 1fr))`,
-                gap: "10px",
+                gap: "8px",
                 flex: 1,
                 minHeight: 0,
               }}
@@ -338,7 +338,7 @@ export default function MonthlyRankingDisplay() {
                   key={`col-${colIdx}`}
                   style={{
                     display: "grid",
-                    gap: "8px",
+                    gap: "6px",
                     minHeight: 0,
                     gridTemplateRows: `repeat(${Math.max(column.length, 1)}, minmax(0, 1fr))`,
                   }}
@@ -348,13 +348,13 @@ export default function MonthlyRankingDisplay() {
                       key={`${item.rank}-${item.nickname}`}
                       style={{
                         background: "#1e293b",
-                        padding: "8px 10px",
+                        padding: "7px 10px",
                         borderRadius: "10px",
-                        display: "flex",
-                        justifyContent: "space-between",
+                        display: "grid",
+                        gridTemplateColumns: "54px minmax(0, 1fr) 58px",
                         alignItems: "center",
                         border: "1px solid rgba(255,255,255,0.16)",
-                        gap: "8px",
+                        columnGap: "8px",
                         fontSize: "16px",
                         boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.03)",
                       }}
@@ -362,16 +362,16 @@ export default function MonthlyRankingDisplay() {
                       <span
                         style={{
                           opacity: 0.82,
-                          minWidth: "48px",
+                          minWidth: "54px",
                           fontWeight: 600,
+                          textAlign: "left",
                         }}
                       >
                         {item.rank}위
                       </span>
                       <span
                         style={{
-                          flex: 1,
-                          textAlign: "center",
+                          textAlign: "left",
                           fontSize: "18px",
                           fontWeight: 400,
                           lineHeight: 1.1,
@@ -386,7 +386,7 @@ export default function MonthlyRankingDisplay() {
                         style={{
                           color: "#22c55e",
                           fontWeight: 700,
-                          minWidth: "64px",
+                          minWidth: "58px",
                           textAlign: "right",
                           fontSize: "16px",
                         }}
