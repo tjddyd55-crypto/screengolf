@@ -32,6 +32,10 @@ type MemberListPayload = {
     handi?: number | string
     lastLoginDate?: string
     regDate?: string
+    playDate?: string
+    gameDate?: string
+    updDate?: string
+    [key: string]: unknown
   }>
 }
 
@@ -153,7 +157,12 @@ function parseMembers(payload: MemberListPayload): PlayerRecord[] {
     .map((row) => {
       const nickname = (row.nickName ?? "").trim()
       const handicap = Number.parseFloat(String(row.handi ?? ""))
-      const roundDate = row.lastLoginDate ?? row.regDate ?? ""
+      const roundDate =
+        row.playDate ??
+        row.gameDate ??
+        row.lastLoginDate ??
+        row.updDate ??
+        ""
 
       return {
         nickname,
@@ -164,6 +173,34 @@ function parseMembers(payload: MemberListPayload): PlayerRecord[] {
     .filter(
       (row) => row.nickname.length > 0 && Number.isFinite(row.handicap),
     )
+}
+
+function getTargetMonthKey(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, "0")}`
+}
+
+function normalizeMonthKeyFromDate(rawDate: string): string | null {
+  const match = rawDate.match(/(\d{4})[-.](\d{2})[-.](\d{2})/)
+  if (!match) {
+    return null
+  }
+
+  const year = match[1]
+  const month = match[2]
+  return `${year}-${month}`
+}
+
+function filterByTargetMonth(
+  players: PlayerRecord[],
+  year: number,
+  month: number,
+): PlayerRecord[] {
+  const targetMonthKey = getTargetMonthKey(year, month)
+
+  return players.filter((player) => {
+    const monthKey = normalizeMonthKeyFromDate(player.roundDate)
+    return monthKey === targetMonthKey
+  })
 }
 
 function parseTotalPages(payload: MemberListPayload): number {
@@ -243,5 +280,6 @@ export async function scrapeMonthlyPlayers(
     allRecords.push(...parseMembers(payload))
   }
 
-  return allRecords
+  const filteredByMonth = filterByTargetMonth(allRecords, year, month)
+  return filteredByMonth
 }
