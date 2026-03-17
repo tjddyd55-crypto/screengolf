@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server"
 import { getLastMonthCache } from "@/lib/sg-ranking/ranking-cache"
-import { refreshRankingCache } from "@/lib/sg-ranking/cron-refresh"
+import { ensureFreshCache, refreshRankingCache } from "@/lib/sg-ranking/cron-refresh"
 
 export const dynamic = "force-dynamic"
 
 export async function GET() {
+  await ensureFreshCache()
+
   let cached = getLastMonthCache()
 
   if (!cached) {

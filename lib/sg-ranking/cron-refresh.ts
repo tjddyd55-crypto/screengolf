@@ -9,13 +9,14 @@ import {
 } from "./ranking-cache"
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000
+let refreshInFlight: Promise<void> | null = null
 
 function getPreviousMonth(year: number, month: number) {
   if (month === 1) return { year: year - 1, month: 12 }
   return { year, month: month - 1 }
 }
 
-export async function refreshRankingCache(): Promise<void> {
+async function doRefreshRankingCache(): Promise<void> {
   const now = new Date()
   const currentYear = now.getFullYear()
   const currentMonth = now.getMonth() + 1
@@ -48,6 +49,33 @@ export async function refreshRankingCache(): Promise<void> {
     )
   } catch (error) {
     console.error("[cron-refresh] 갱신 실패, 기존 캐시 유지:", error)
+  }
+}
+
+export async function refreshRankingCache(): Promise<void> {
+  if (refreshInFlight) {
+    return refreshInFlight
+  }
+
+  refreshInFlight = doRefreshRankingCache().finally(() => {
+    refreshInFlight = null
+  })
+
+  return refreshInFlight
+}
+
+export async function ensureFreshCache(
+  maxAgeMs: number = REFRESH_INTERVAL_MS,
+): Promise<void> {
+  const lastRefreshedAt = getLastRefreshedAt()
+  if (!lastRefreshedAt) {
+    await refreshRankingCache()
+    return
+  }
+
+  const elapsedMs = Date.now() - lastRefreshedAt.getTime()
+  if (elapsedMs >= maxAgeMs) {
+    await refreshRankingCache()
   }
 }
 
