@@ -59,19 +59,14 @@ async function doRefreshRankingCache(): Promise<void> {
     const currentRanking = generateRanking(currentPlayers)
     setCurrentMonthCache(currentYear, currentMonth, currentRanking)
 
-    let lastMonthTop5 = lastMonthSnapshot?.top5 ?? null
-    if (!lastMonthTop5) {
-      const lastPlayers = await scrapeMonthlyPlayers(lastYear, lastMonth)
-      const lastRanking = generateRanking(lastPlayers)
-      lastMonthTop5 = takeTop(lastRanking, 5)
-      setLastMonthSnapshot(lastYear, lastMonth, lastMonthTop5)
-      console.log(`[cron-refresh] 지난달 TOP5 스냅샷 고정 완료 (${lastYear}-${lastMonth})`)
-    } else {
+    // 지난달은 월말 스냅샷만 사용. 새 달에 지난달을 재스크래핑하면 API가 현재 핸디를 주어 순위가 틀어지므로 제외.
+    const lastMonthTop5 = lastMonthSnapshot?.top5 ?? null
+    if (lastMonthTop5) {
       setLastMonthCache(lastYear, lastMonth, lastMonthTop5)
     }
 
     console.log(
-      `[cron-refresh] 갱신 완료 - 현재월: ${currentRanking.length}명, 지난달 TOP5: ${lastMonthTop5.length}명(고정)`,
+      `[cron-refresh] 갱신 완료 - 현재월: ${currentRanking.length}명, 지난달 TOP5: ${lastMonthTop5 ? lastMonthTop5.length : 0}명(월말 스냅샷)`,
     )
   } catch (error) {
     console.error("[cron-refresh] 갱신 실패, 기존 캐시 유지:", error)
