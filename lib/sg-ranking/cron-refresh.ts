@@ -5,6 +5,7 @@ import {
   getLastMonthSnapshot,
   setLastMonthSnapshot,
   setCurrentMonthCache,
+  getCurrentMonthCache,
   getLastRefreshedAt,
 } from "./ranking-cache"
 
@@ -20,6 +21,31 @@ async function doRefreshRankingCache(): Promise<void> {
   const now = new Date()
   const currentYear = now.getFullYear()
   const currentMonth = now.getMonth() + 1
+
+  const previousCurrentMonthCache = getCurrentMonthCache()
+
+  if (
+    previousCurrentMonthCache &&
+    (previousCurrentMonthCache.year !== currentYear ||
+      previousCurrentMonthCache.month !== currentMonth)
+  ) {
+    const rolloverSnapshot = getLastMonthSnapshot(
+      previousCurrentMonthCache.year,
+      previousCurrentMonthCache.month,
+    )
+
+    if (!rolloverSnapshot) {
+      const frozenTop5 = takeTop(previousCurrentMonthCache.ranking, 5)
+      setLastMonthSnapshot(
+        previousCurrentMonthCache.year,
+        previousCurrentMonthCache.month,
+        frozenTop5,
+      )
+      console.log(
+        `[cron-refresh] 월 전환 스냅샷 고정 완료 (${previousCurrentMonthCache.year}-${previousCurrentMonthCache.month})`,
+      )
+    }
+  }
 
   const { year: lastYear, month: lastMonth } = getPreviousMonth(
     currentYear,
