@@ -1,0 +1,357 @@
+import fs from "fs"
+import path from "path"
+import Database from "better-sqlite3"
+
+let db: Database.Database | null = null
+
+const DEFAULT_PLAN_TYPES = [
+  { code: "morning_flat", name: "오전정액", sort_order: 1 },
+  { code: "afternoon_flat", name: "오후정액", sort_order: 2 },
+  { code: "night_flat", name: "야간정액", sort_order: 3 },
+] as const
+
+function getDbPath(): string {
+  const dataDir = path.join(process.cwd(), "data")
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true })
+  }
+  return path.join(dataDir, "store.db")
+}
+
+export function getDb(): Database.Database {
+  if (!db) {
+    db = new Database(getDbPath())
+    db.pragma("journal_mode = WAL")
+    db.pragma("foreign_keys = ON")
+    initializeSchema(db)
+  }
+  return db
+}
+
+function seedPlanTypes(database: Database.Database): void {
+  const insert = database.prepare(`
+    INSERT INTO store_plan_types (code, name, sort_order, is_active)
+    SELECT ?, ?, ?, 1
+    WHERE NOT EXISTS (SELECT 1 FROM store_plan_types WHERE code = ?)
+  `)
+
+  for (const plan of DEFAULT_PLAN_TYPES) {
+    insert.run(plan.code, plan.name, plan.sort_order, plan.code)
+  }
+}
+
+function createStoreMembersTable(database: Database.Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS store_members (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      nickname TEXT,
+      phone TEXT,
+      plan_type TEXT,
+      plan_type_id INTEGER,
+      expires_at TEXT,
+      memo TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (plan_type_id) REFERENCES store_plan_types(id)
+    );
+  `)
+}
+
+function migrateStoreMembersIfNeeded(database: Database.Database): void {
+  const columns = database
+    .prepare("PRAGMA table_info(store_members)")
+    .all() as { name: string }[]
+
+  const hasPlanTypeId = columns.some((column) => column.name === "plan_type_id")
+  if (hasPlanTypeId) return
+
+  database.exec(`
+    CREATE TABLE store_members_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      nickname TEXT,
+      phone TEXT,
+      plan_type TEXT,
+      plan_type_id INTEGER,
+      expires_at TEXT,
+      memo TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (plan_type_id) REFERENCES store_plan_types(id)
+    );
+
+    INSERT INTO store_members_new (
+      id, name, nickname, phone, plan_type, expires_at, memo, is_active, created_at, updated_at
+    )
+    SELECT id, name, nickname, phone, plan_type, expires_at, memo, is_active, created_at, updated_at
+    FROM store_members;
+
+    DROP TABLE store_members;
+    ALTER TABLE store_members_new RENAME TO store_members;
+  `)
+
+  database.exec(`
+    UPDATE store_members
+    SET plan_type_id = (
+      SELECT id FROM store_plan_types WHERE store_plan_types.code = store_members.plan_type
+    )
+    WHERE plan_type IS NOT NULL;
+  `)
+}
+
+function migrateDisplaySettingsIfNeeded(database: Database.Database): void {
+  const columns = database
+    .prepare("PRAGMA table_info(display_settings)")
+    .all() as { name: string }[]
+
+  const hasMediaFields = columns.some(
+    (column) => column.name === "media_full_file_id",
+  )
+  if (hasMediaFields) return
+
+  database.exec(`
+    CREATE TABLE display_settings_new (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      mode TEXT NOT NULL DEFAULT 'ranking'
+        CHECK (mode IN ('ranking', 'notice', 'media_full', 'media_split')),
+      active_notice_id INTEGER,
+      media_full_file_id INTEGER,
+      media_left_file_id INTEGER,
+      media_right_file_id INTEGER,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (active_notice_id) REFERENCES display_notices(id),
+      FOREIGN KEY (media_full_file_id) REFERENCES display_assets(id),
+      FOREIGN KEY (media_left_file_id) REFERENCES display_assets(id),
+      FOREIGN KEY (media_right_file_id) REFERENCES display_assets(id)
+    );
+
+    INSERT INTO display_settings_new (id, mode, active_notice_id, updated_at)
+    SELECT id, mode, active_notice_id, updated_at FROM display_settings;
+
+    DROP TABLE display_settings;
+    ALTER TABLE display_settings_new RENAME TO display_settings;
+  `)
+}
+
+function migrateDisplayScenesIfNeeded(database: Database.Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS display_scenes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      mode TEXT NOT NULL CHECK (mode IN ('ranking', 'notice', 'media_full', 'media_split')),
+      notice_id INTEGER,
+      media_full_file_id INTEGER,
+      media_left_file_id INTEGER,
+      media_right_file_id INTEGER,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (notice_id) REFERENCES display_notices(id),
+      FOREIGN KEY (media_full_file_id) REFERENCES display_assets(id),
+      FOREIGN KEY (media_left_file_id) REFERENCES display_assets(id),
+      FOREIGN KEY (media_right_file_id) REFERENCES display_assets(id)
+    );
+  `)
+
+  const settingsColumns = database
+    .prepare("PRAGMA table_info(display_settings)")
+    .all() as { name: string }[]
+
+  const hasCurrentSceneId = settingsColumns.some(
+    (column) => column.name === "current_scene_id",
+  )
+
+  if (!hasCurrentSceneId) {
+    database.exec(`
+      ALTER TABLE display_settings ADD COLUMN current_scene_id INTEGER
+        REFERENCES display_scenes(id);
+    `)
+  }
+
+  const sceneCount = database
+    .prepare("SELECT COUNT(*) AS count FROM display_scenes")
+    .get() as { count: number }
+
+  if (sceneCount.count > 0) return
+
+  const settings = database
+    .prepare(
+      `SELECT mode, active_notice_id, media_full_file_id, media_left_file_id, media_right_file_id
+       FROM display_settings WHERE id = 1`,
+    )
+    .get() as {
+    mode: string
+    active_notice_id: number | null
+    media_full_file_id: number | null
+    media_left_file_id: number | null
+    media_right_file_id: number | null
+  } | undefined
+
+  const insertScene = database.prepare(`
+    INSERT INTO display_scenes (
+      name, mode, notice_id, media_full_file_id, media_left_file_id, media_right_file_id, sort_order, is_active
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+  `)
+
+  const rankingResult = insertScene.run(
+    "랭킹 화면",
+    "ranking",
+    null,
+    null,
+    null,
+    null,
+    1,
+  )
+  const rankingSceneId = Number(rankingResult.lastInsertRowid)
+  let currentSceneId = rankingSceneId
+  let sortOrder = 2
+
+  if (settings?.mode === "notice" && settings.active_notice_id) {
+    const result = insertScene.run(
+      "공지사항 화면",
+      "notice",
+      settings.active_notice_id,
+      null,
+      null,
+      null,
+      sortOrder,
+    )
+    currentSceneId = Number(result.lastInsertRowid)
+    sortOrder += 1
+  } else if (settings?.mode === "media_full" && settings.media_full_file_id) {
+    const result = insertScene.run(
+      "가로 전체 화면",
+      "media_full",
+      null,
+      settings.media_full_file_id,
+      null,
+      null,
+      sortOrder,
+    )
+    currentSceneId = Number(result.lastInsertRowid)
+    sortOrder += 1
+  } else if (
+    settings?.mode === "media_split" &&
+    settings.media_left_file_id &&
+    settings.media_right_file_id
+  ) {
+    const result = insertScene.run(
+      "세로 2분할 화면",
+      "media_split",
+      null,
+      null,
+      settings.media_left_file_id,
+      settings.media_right_file_id,
+      sortOrder,
+    )
+    currentSceneId = Number(result.lastInsertRowid)
+  }
+
+  database
+    .prepare("UPDATE display_settings SET current_scene_id = ? WHERE id = 1")
+    .run(currentSceneId)
+}
+
+function initializeSchema(database: Database.Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS display_notices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      theme TEXT NOT NULL DEFAULT 'default' CHECK (theme IN ('default', 'event', 'warning', 'promotion')),
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS display_assets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      file_url TEXT NOT NULL,
+      file_type TEXT NOT NULL CHECK (file_type IN ('image', 'pdf')),
+      original_name TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      layout_type TEXT NOT NULL CHECK (layout_type IN ('full', 'split_left', 'split_right')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS display_scenes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      mode TEXT NOT NULL CHECK (mode IN ('ranking', 'notice', 'media_full', 'media_split')),
+      notice_id INTEGER,
+      media_full_file_id INTEGER,
+      media_left_file_id INTEGER,
+      media_right_file_id INTEGER,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (notice_id) REFERENCES display_notices(id),
+      FOREIGN KEY (media_full_file_id) REFERENCES display_assets(id),
+      FOREIGN KEY (media_left_file_id) REFERENCES display_assets(id),
+      FOREIGN KEY (media_right_file_id) REFERENCES display_assets(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS display_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      mode TEXT NOT NULL DEFAULT 'ranking'
+        CHECK (mode IN ('ranking', 'notice', 'media_full', 'media_split')),
+      current_scene_id INTEGER,
+      active_notice_id INTEGER,
+      media_full_file_id INTEGER,
+      media_left_file_id INTEGER,
+      media_right_file_id INTEGER,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (current_scene_id) REFERENCES display_scenes(id),
+      FOREIGN KEY (active_notice_id) REFERENCES display_notices(id),
+      FOREIGN KEY (media_full_file_id) REFERENCES display_assets(id),
+      FOREIGN KEY (media_left_file_id) REFERENCES display_assets(id),
+      FOREIGN KEY (media_right_file_id) REFERENCES display_assets(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS store_plan_types (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      code TEXT NOT NULL UNIQUE,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `)
+
+  seedPlanTypes(database)
+
+  migrateDisplaySettingsIfNeeded(database)
+  migrateDisplayScenesIfNeeded(database)
+
+  const memberTable = database
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'store_members'",
+    )
+    .get()
+
+  if (!memberTable) {
+    createStoreMembersTable(database)
+  } else {
+    migrateStoreMembersIfNeeded(database)
+  }
+
+  const existing = database
+    .prepare("SELECT id FROM display_settings WHERE id = 1")
+    .get()
+
+  if (!existing) {
+    database
+      .prepare(
+        "INSERT INTO display_settings (id, mode, active_notice_id) VALUES (1, 'ranking', NULL)",
+      )
+      .run()
+  }
+}

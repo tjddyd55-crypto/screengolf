@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import axios from "axios"
+import { formatHandicap } from "@/lib/format-handicap"
 
 type RankingItem = {
   rank: number
@@ -41,7 +42,7 @@ export async function GET() {
       .map((item) => ({
         rank: item.rownum,
         name: item.nickName.trim(),
-        handicap: item.sg_handicap.toFixed(2),
+        handicap: formatHandicap(item.sg_handicap),
         userNo: item.userNo,
       }))
 

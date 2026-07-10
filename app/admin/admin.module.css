@@ -1,0 +1,291 @@
+.adminRoot {
+  min-height: 100vh;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.adminHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: #111827;
+}
+
+.adminHeaderTitle {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.adminHeaderActions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.adminMain {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  display: block;
+  padding: 24px;
+  border-radius: 12px;
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: inherit;
+  text-decoration: none;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  border-color: #38bdf8;
+}
+
+.cardTitle {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.cardDesc {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.panel {
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.pageTitle {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 20px;
+}
+
+.formGroup {
+  margin-bottom: 16px;
+}
+
+.formLabel {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: #cbd5e1;
+}
+
+.formInput,
+.formSelect,
+.formTextarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 14px;
+}
+
+.formTextarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.buttonRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btnPrimary {
+  background: #2563eb;
+  color: white;
+}
+
+.btnSecondary {
+  background: #334155;
+  color: white;
+}
+
+.btnDanger {
+  background: #dc2626;
+  color: white;
+}
+
+.btnLink {
+  background: transparent;
+  color: #38bdf8;
+  padding: 0;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.table th,
+.table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.table th {
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.statusNormal {
+  color: #e2e8f0;
+}
+
+.statusWarning {
+  color: #facc15;
+  font-weight: 700;
+}
+
+.statusExpired {
+  color: #ef4444;
+  font-weight: 700;
+}
+
+.message {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.messageSuccess {
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+}
+
+.messageError {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+}
+
+.filterRow {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.loginWrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0f172a;
+  padding: 24px;
+}
+
+.loginPanel {
+  width: 100%;
+  max-width: 400px;
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 32px;
+}
+
+.loginTitle {
+  margin: 0 0 24px;
+  font-size: 24px;
+  font-weight: 700;
+  color: #f8fafc;
+  text-align: center;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badgeActive {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+}
+
+.badgeInactive {
+  background: rgba(148, 163, 184, 0.2);
+  color: #cbd5e1;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 50;
+}
+
+.modal {
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.modalTitle {
+  margin: 0 0 16px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.radioGroup {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.radioLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}

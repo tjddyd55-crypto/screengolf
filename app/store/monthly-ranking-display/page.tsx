@@ -1,6 +1,12 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { formatHandicap } from "@/lib/format-handicap"
+import type { NoticeTheme } from "@/lib/admin/constants"
+import type { DisplayStatePayload } from "@/lib/display/types"
+import NoticeDisplay from "./NoticeDisplay"
+import MediaFullDisplay from "@/components/display/MediaFullDisplay"
+import MediaSplitDisplay from "@/components/display/MediaSplitDisplay"
 
 type RankedPlayer = {
   rank: number
@@ -22,6 +28,10 @@ type CurrentMonthResponse = {
   month?: number
   data: RankedPlayer[]
   message?: string
+}
+
+type DisplayStateResponse = DisplayStatePayload & {
+  success: boolean
 }
 
 const TOP_CARD_COLORS = ["#FFD700", "#C0C0C0", "#CD7F32", "#3b82f6", "#22c55e"]
@@ -69,17 +79,27 @@ function buildColumns(players: RankedPlayer[]): RankedPlayer[][] {
   return columns
 }
 
-function formatHandicap(value: number): string {
-  return Number(value).toFixed(1)
-}
-
 export default function MonthlyRankingDisplay() {
+  const [displayState, setDisplayState] = useState<DisplayStateResponse>({
+    success: true,
+    mode: "ranking",
+  })
   const [lastMonth, setLastMonth] = useState<LastMonthResponse | null>(null)
   const [currentMonth, setCurrentMonth] =
     useState<CurrentMonthResponse | null>(null)
   const now = useCurrentTime()
 
-  const fetchData = useCallback(async () => {
+  const fetchDisplayState = useCallback(async () => {
+    try {
+      const res = await fetch("/api/display-state", { cache: "no-store" })
+      const json = (await res.json()) as DisplayStateResponse
+      setDisplayState(json)
+    } catch (error) {
+      console.error("[monthly-ranking-display] display-state 로딩 실패:", error)
+    }
+  }, [])
+
+  const fetchRankingData = useCallback(async () => {
     try {
       const [lastRes, currentRes] = await Promise.all([
         fetch("/api/monthly-ranking/last-month", { cache: "no-store" }),
@@ -99,10 +119,43 @@ export default function MonthlyRankingDisplay() {
   }, [])
 
   useEffect(() => {
-    fetchData()
-    const id = window.setInterval(fetchData, 30000)
+    fetchDisplayState()
+    const id = window.setInterval(fetchDisplayState, 30000)
     return () => window.clearInterval(id)
-  }, [fetchData])
+  }, [fetchDisplayState])
+
+  useEffect(() => {
+    fetchRankingData()
+    if (displayState.mode !== "ranking") return
+
+    const id = window.setInterval(fetchRankingData, 30000)
+    return () => window.clearInterval(id)
+  }, [displayState.mode, fetchRankingData])
+
+  if (displayState.mode === "notice" && "notice" in displayState) {
+    return (
+      <NoticeDisplay
+        title={displayState.notice.title}
+        body={displayState.notice.body}
+        theme={displayState.notice.theme as NoticeTheme}
+        now={now}
+      />
+    )
+  }
+
+  if (displayState.mode === "media_full" && "media" in displayState) {
+    return <MediaFullDisplay media={displayState.media} />
+  }
+
+  if (
+    displayState.mode === "media_split" &&
+    "left" in displayState &&
+    "right" in displayState
+  ) {
+    return (
+      <MediaSplitDisplay left={displayState.left} right={displayState.right} />
+    )
+  }
 
   const lastMonthTop5 = lastMonth?.data ?? []
   const currentPlayers = currentMonth?.data ?? []
@@ -111,8 +164,8 @@ export default function MonthlyRankingDisplay() {
   const columns = buildColumns(currentRest)
 
   const lastMonthLabel = lastMonth?.month
-    ? `🏆 ${lastMonth.month}월 최종 랭킹 TOP5`
-    : "🏆 지난달 최종 랭킹 TOP5"
+    ? `🏆 ${lastMonth.month}월 최종 TOP5`
+    : "🏆 지난달 최종 TOP5"
 
   const currentTop5Label = currentMonth?.month
     ? `🔥 ${currentMonth.month}월 LIVE TOP5`
@@ -137,7 +190,6 @@ export default function MonthlyRankingDisplay() {
         fontFamily: "Pretendard, sans-serif",
       }}
     >
-      {/* 헤더 */}
       <div style={{ position: "relative", marginBottom: "8px", flexShrink: 0 }}>
         <h1
           style={{
@@ -166,14 +218,13 @@ export default function MonthlyRankingDisplay() {
         </div>
       </div>
 
-      {/* 지난달 TOP5 */}
       <div style={{ flexShrink: 0, marginBottom: "10px" }}>
         <div
           style={{
-            fontSize: "28px",
+            fontSize: "36px",
             fontWeight: 800,
             color: "#FFD54A",
-            marginBottom: "10px",
+            marginBottom: "8px",
             letterSpacing: "1px",
             textAlign: "left",
           }}
@@ -187,7 +238,7 @@ export default function MonthlyRankingDisplay() {
               textAlign: "center",
               color: "#64748b",
               fontSize: "18px",
-              padding: "20px 0",
+              padding: "16px 0",
             }}
           >
             지난달 데이터가 없습니다.
@@ -197,7 +248,7 @@ export default function MonthlyRankingDisplay() {
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(5, 1fr)",
-              gap: "10px",
+              gap: "8px",
             }}
           >
             {lastMonthTop5.map((item, index) => (
@@ -205,23 +256,23 @@ export default function MonthlyRankingDisplay() {
                 key={`last-${item.rank}-${item.nickname}`}
                 style={{
                   background: TOP_CARD_COLORS[index],
-                  borderRadius: "12px",
-                  padding: "12px 16px",
-                  height: "90px",
+                  borderRadius: "10px",
+                  padding: "10px 12px",
+                  height: "72px",
                   display: "flex",
                   flexDirection: "column",
                   justifyContent: "center",
                   textAlign: "center",
                   color: index < 3 ? "black" : "white",
                   fontWeight: 700,
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
+                  boxShadow: "0 3px 10px rgba(0,0,0,0.16)",
                 }}
               >
-                <div style={{ fontSize: "22px", lineHeight: 1.05 }}>{item.rank}위</div>
-                <div style={{ fontSize: "20px", fontWeight: 400, lineHeight: 1.1 }}>
+                <div style={{ fontSize: "18px", lineHeight: 1.05 }}>{item.rank}위</div>
+                <div style={{ fontSize: "16px", fontWeight: 400, lineHeight: 1.1 }}>
                   {item.nickname}
                 </div>
-                <div style={{ fontSize: "17px" }}>
+                <div style={{ fontSize: "14px" }}>
                   핸디캡 {formatHandicap(item.handicap)}
                 </div>
               </div>
@@ -230,13 +281,12 @@ export default function MonthlyRankingDisplay() {
         )}
       </div>
 
-      {/* 이번달 LIVE TOP5 */}
       <div
         style={{
-          fontSize: "26px",
+          fontSize: "30px",
           fontWeight: 700,
           color: "#00E5FF",
-          marginTop: "10px",
+          marginTop: "8px",
           marginBottom: "8px",
           letterSpacing: "1px",
           flexShrink: 0,
@@ -402,7 +452,6 @@ export default function MonthlyRankingDisplay() {
         </>
       )}
 
-      {/* 하단 메시지 */}
       <div
         style={{
           textAlign: "center",

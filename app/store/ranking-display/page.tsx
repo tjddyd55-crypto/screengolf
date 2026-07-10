@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { formatHandicap } from "@/lib/format-handicap"
 
 type RankingItem = {
   rank: number
@@ -142,7 +143,7 @@ export default function RankingDisplay() {
           >
             <div style={{ fontSize: "40px" }}>{item.rank}위</div>
             <div style={{ fontSize: "31px", lineHeight: 1.15, fontWeight: 400 }}>{item.name}</div>
-            <div style={{ fontSize: "22px" }}>핸디캡 {item.handicap}</div>
+            <div style={{ fontSize: "22px" }}>핸디캡 {formatHandicap(item.handicap)}</div>
           </div>
         ))}
       </div>
@@ -206,7 +207,7 @@ export default function RankingDisplay() {
                     fontSize: "16px",
                   }}
                 >
-                  {item.handicap}
+                  {formatHandicap(item.handicap)}
                 </span>
               </div>
             ))}
