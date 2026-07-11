@@ -119,11 +119,19 @@ function migrateRankingSnapshotColumns(db: ReturnType<typeof getDb>): void {
     )
   }
 
-  db.exec(`
-    UPDATE monthly_ranking_snapshots
-    SET generated_at = COALESCE(NULLIF(generated_at, ''), fixed_at, datetime('now'))
-    WHERE generated_at IS NULL OR generated_at = '';
-  `)
+  if (names.has("fixed_at")) {
+    db.exec(`
+      UPDATE monthly_ranking_snapshots
+      SET generated_at = COALESCE(NULLIF(generated_at, ''), fixed_at, datetime('now'))
+      WHERE generated_at IS NULL OR generated_at = '';
+    `)
+  } else {
+    db.exec(`
+      UPDATE monthly_ranking_snapshots
+      SET generated_at = COALESCE(NULLIF(generated_at, ''), datetime('now'))
+      WHERE generated_at IS NULL OR generated_at = '';
+    `)
+  }
 
   db.exec(`
     UPDATE monthly_ranking_snapshots
