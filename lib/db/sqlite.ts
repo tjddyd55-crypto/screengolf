@@ -1,6 +1,5 @@
-import fs from "fs"
-import path from "path"
 import Database from "better-sqlite3"
+import { ensureDataDir, getStoreDbPath } from "@/lib/storage/data-paths"
 
 let db: Database.Database | null = null
 
@@ -11,11 +10,8 @@ const DEFAULT_PLAN_TYPES = [
 ] as const
 
 function getDbPath(): string {
-  const dataDir = path.join(process.cwd(), "data")
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true })
-  }
-  return path.join(dataDir, "store.db")
+  ensureDataDir()
+  return getStoreDbPath()
 }
 
 export function getDb(): Database.Database {

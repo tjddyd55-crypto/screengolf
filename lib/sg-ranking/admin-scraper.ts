@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from "axios"
+import { getMonthDateRange } from "./date-range"
 
 export type PlayerRecord = {
   nickname: string
@@ -253,10 +254,11 @@ export async function scrapeMonthlyPlayers(
     withCredentials: true,
   })
 
-  const pad = (n: number) => String(n).padStart(2, "0")
-  const startDate = `${year}-${pad(month)}-01`
-  const lastDay = new Date(year, month, 0).getDate()
-  const endDate = `${year}-${pad(month)}-${pad(lastDay)}`
+  const { startDate, endDate } = getMonthDateRange(year, month)
+
+  console.log(
+    `[admin-scraper] 회원조회 시작 year=${year}, month=${month}, startDate=${startDate}, endDate=${endDate}`,
+  )
 
   const cookie = await sgLogin(client, id, password)
   const firstPage = await fetchMemberPage(
@@ -269,6 +271,10 @@ export async function scrapeMonthlyPlayers(
   const totalPages = parseTotalPages(firstPage)
   const allRecords: PlayerRecord[] = [...parseMembers(firstPage)]
 
+  console.log(
+    `[admin-scraper] page 1 members=${allRecords.length}, totalPages=${totalPages}, storeMemberList=${Boolean(firstPage.storeMemberList)}`,
+  )
+
   for (let pageIndex = 2; pageIndex <= totalPages; pageIndex += 1) {
     const payload = await fetchMemberPage(
       client,
@@ -277,9 +283,16 @@ export async function scrapeMonthlyPlayers(
       endDate,
       pageIndex,
     )
-    allRecords.push(...parseMembers(payload))
+    const pageMembers = parseMembers(payload)
+    allRecords.push(...pageMembers)
+    console.log(
+      `[admin-scraper] page ${pageIndex} members=${pageMembers.length}`,
+    )
   }
 
   const filteredByMonth = filterByTargetMonth(allRecords, year, month)
+  console.log(
+    `[admin-scraper] collected=${allRecords.length}, deduplicated-by-month=${filteredByMonth.length}`,
+  )
   return filteredByMonth
 }

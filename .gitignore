@@ -44,5 +44,8 @@ next-env.d.ts
 /data/store.db
 /data/store.db-*
 
+# ranking snapshot cache
+/data/monthly-ranking-snapshots.json
+
 # uploaded display files
 /public/uploads/
