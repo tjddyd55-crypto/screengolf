@@ -162,6 +162,18 @@ describe("month key helpers", () => {
   })
 })
 
+describe("past-month scrape policy", () => {
+  it("현재월과 지난달 monthKey를 구분한다", () => {
+    const july = new Date("2026-07-11T12:00:00+09:00")
+    const current = getCurrentMonthDateRange(july)
+    const last = getLastMonthDateRange(july)
+
+    expect(current.monthKey).toBe("2026-07")
+    expect(last.monthKey).toBe("2026-06")
+    expect(current.monthKey).not.toBe(last.monthKey)
+  })
+})
+
 describe("data-paths", () => {
   it("DATA_DIR 환경변수를 우선 사용한다", () => {
     const original = process.env.DATA_DIR

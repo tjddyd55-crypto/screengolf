@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from "axios"
-import { getMonthDateRange } from "./date-range"
+import { getKoreaYearMonth, getMonthDateRange } from "./date-range"
 
 export type PlayerRecord = {
   nickname: string
@@ -291,8 +291,20 @@ export async function scrapeMonthlyPlayers(
   }
 
   const filteredByMonth = filterByTargetMonth(allRecords, year, month)
+  const { year: currentYear, month: currentMonth } = getKoreaYearMonth()
+  const isCurrentMonth = year === currentYear && month === currentMonth
+
+  if (isCurrentMonth) {
+    console.log(
+      `[admin-scraper] current-month filter: collected=${allRecords.length}, after-filter=${filteredByMonth.length}`,
+    )
+    return filteredByMonth
+  }
+
+  // 지난달 조회: SG startDate/endDate 결과를 그대로 사용한다.
+  // lastLoginDate는 최근 접속일이라 7월에 재방문한 6월 이용자가 잘못 제외된다.
   console.log(
-    `[admin-scraper] collected=${allRecords.length}, deduplicated-by-month=${filteredByMonth.length}`,
+    `[admin-scraper] past-month query: collected=${allRecords.length}, skip-lastLogin-filter=true`,
   )
-  return filteredByMonth
+  return allRecords
 }

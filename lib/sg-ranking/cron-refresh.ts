@@ -21,12 +21,27 @@ import {
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000
 let refreshInFlight: Promise<void> | null = null
 let monthlyFinalJobKey: string | null = null
+let shouldRepairRecoveredSnapshot = true
 
 async function recoverLastMonthSnapshot(
   lastYear: number,
   lastMonth: number,
 ): Promise<void> {
-  if (hasPersistedLastMonthSnapshot(lastYear, lastMonth)) {
+  const existing = getLastMonthSnapshotRecord(lastYear, lastMonth)
+
+  if (existing?.status === "FINAL") {
+    return
+  }
+
+  if (existing?.status === "RECOVERED") {
+    if (!shouldRepairRecoveredSnapshot) {
+      return
+    }
+    shouldRepairRecoveredSnapshot = false
+    console.log(
+      `[cron-refresh] RECOVERED 스냅샷 재계산 시작 (${lastYear}-${lastMonth})`,
+    )
+  } else if (hasPersistedLastMonthSnapshot(lastYear, lastMonth)) {
     return
   }
 
