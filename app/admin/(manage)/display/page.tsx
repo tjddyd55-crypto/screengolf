@@ -7,22 +7,25 @@ import {
   DISPLAY_MODE_LABELS,
   type DisplayMode,
 } from "@/lib/admin/constants"
-import DisplayMediaRenderer from "@/components/display/DisplayMediaRenderer"
+import ScenePreviewFrame from "@/components/display/ScenePreviewFrame"
 
 type DisplayAsset = {
   id: number
   title: string
-  file_url?: string
-  fileUrl?: string
-  file_type?: "image" | "pdf"
-  fileType?: "image" | "pdf"
-  mime_type?: string
-  mimeType?: string
-  layout_type: "full" | "split_left" | "split_right"
-  original_name?: string
+  fileUrl: string
+  fileType: "image" | "pdf"
+  mimeType: string
+  layoutType: "full" | "split_left" | "split_right"
   originalName?: string
-  file_missing?: boolean
   fileMissing?: boolean
+  status?: string
+  // 하위 호환
+  file_url?: string
+  file_type?: "image" | "pdf"
+  mime_type?: string
+  layout_type?: "full" | "split_left" | "split_right"
+  original_name?: string
+  file_missing?: boolean
 }
 
 type DisplaySettings = {
@@ -42,6 +45,34 @@ type NoticeOption = {
   id: number
   title: string
   is_active: boolean
+}
+
+function normalizeAsset(asset: DisplayAsset): DisplayAsset {
+  return {
+    id: asset.id,
+    title: asset.title,
+    fileUrl: asset.fileUrl || asset.file_url || "",
+    fileType: asset.fileType || asset.file_type || "image",
+    mimeType: asset.mimeType || asset.mime_type || "image/png",
+    layoutType: asset.layoutType || asset.layout_type || "full",
+    originalName: asset.originalName || asset.original_name,
+    fileMissing: Boolean(asset.fileMissing || asset.file_missing),
+    status: asset.status,
+    file_url: asset.fileUrl || asset.file_url,
+    file_type: asset.fileType || asset.file_type,
+    mime_type: asset.mimeType || asset.mime_type,
+    layout_type: asset.layoutType || asset.layout_type,
+    original_name: asset.originalName || asset.original_name,
+    file_missing: Boolean(asset.fileMissing || asset.file_missing),
+  }
+}
+
+function isUsableAsset(asset: DisplayAsset | null): boolean {
+  if (!asset) return false
+  if (asset.fileMissing || asset.file_missing || asset.status === "missing") {
+    return false
+  }
+  return Boolean(asset.id && (asset.fileUrl || asset.file_url))
 }
 
 async function uploadDisplayAsset(
@@ -68,55 +99,35 @@ async function uploadDisplayAsset(
     throw new Error(json.error ?? "파일 업로드에 실패했습니다.")
   }
 
-  return json.asset
+  return normalizeAsset(json.asset)
 }
 
-function AssetPreview({ asset }: { asset: DisplayAsset | null }) {
-  if (!asset) return null
+function UploadHint({
+  asset,
+  emptyText,
+}: {
+  asset: DisplayAsset | null
+  emptyText: string
+}) {
+  if (!asset) {
+    return (
+      <p style={{ marginTop: 12, color: "#94a3b8", fontSize: 13 }}>{emptyText}</p>
+    )
+  }
 
-  const fileUrl = asset.file_url || asset.fileUrl || ""
-  const fileType = asset.file_type || asset.fileType || "image"
-  const mimeType = asset.mime_type || asset.mimeType || "image/png"
-  const missing = Boolean(asset.file_missing || asset.fileMissing)
+  if (asset.fileMissing || asset.status === "missing") {
+    return (
+      <p style={{ marginTop: 12, color: "#f87171", fontSize: 13 }}>
+        기존 원본 파일이 없어 새 파일을 선택해야 합니다.
+      </p>
+    )
+  }
 
   return (
-    <div
-      style={{
-        marginTop: 12,
-        height: 180,
-        borderRadius: 8,
-        overflow: "hidden",
-        border: "1px solid rgba(255,255,255,0.12)",
-        background: "#0f172a",
-      }}
-    >
-      {missing ? (
-        <div
-          style={{
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "#f87171",
-            fontSize: 14,
-            textAlign: "center",
-            padding: 12,
-          }}
-        >
-          원본 파일이 없어 다시 업로드가 필요합니다.
-        </div>
-      ) : (
-        <DisplayMediaRenderer
-          fileUrl={fileUrl}
-          fileType={fileType}
-          mimeType={mimeType}
-          title={asset.title}
-          variant={asset.layout_type === "full" ? "full" : "split"}
-          adminMode
-        />
-      )}
-    </div>
+    <p style={{ marginTop: 8, color: "#cbd5e1", fontSize: 13 }}>
+      {asset.title}
+      {asset.originalName ? ` · ${asset.originalName}` : ""}
+    </p>
   )
 }
 
@@ -129,7 +140,10 @@ export default function AdminDisplayPage() {
   const [leftAsset, setLeftAsset] = useState<DisplayAsset | null>(null)
   const [rightAsset, setRightAsset] = useState<DisplayAsset | null>(null)
   const [message, setMessage] = useState("")
-  const [error, setError] = useState("")
+  const [fullUploadError, setFullUploadError] = useState("")
+  const [leftUploadError, setLeftUploadError] = useState("")
+  const [rightUploadError, setRightUploadError] = useState("")
+  const [applyError, setApplyError] = useState("")
   const [loading, setLoading] = useState(true)
   const [applying, setApplying] = useState(false)
 
@@ -155,12 +169,24 @@ export default function AdminDisplayPage() {
       if (nextSettings) {
         setSelectedMode(nextSettings.mode)
         setActiveNoticeId(nextSettings.active_notice_id ?? "")
-        setFullAsset(nextSettings.media_full_asset)
-        setLeftAsset(nextSettings.media_left_asset)
-        setRightAsset(nextSettings.media_right_asset)
+        setFullAsset(
+          nextSettings.media_full_asset
+            ? normalizeAsset(nextSettings.media_full_asset)
+            : null,
+        )
+        setLeftAsset(
+          nextSettings.media_left_asset
+            ? normalizeAsset(nextSettings.media_left_asset)
+            : null,
+        )
+        setRightAsset(
+          nextSettings.media_right_asset
+            ? normalizeAsset(nextSettings.media_right_asset)
+            : null,
+        )
       }
     } catch {
-      setError("설정을 불러오지 못했습니다.")
+      setApplyError("설정을 불러오지 못했습니다.")
     } finally {
       setLoading(false)
     }
@@ -174,13 +200,14 @@ export default function AdminDisplayPage() {
     const file = event.target.files?.[0]
     if (!file) return
 
-    setError("")
+    setFullUploadError("")
+    setMessage("")
     try {
       const asset = await uploadDisplayAsset(file, "full")
       setFullAsset(asset)
       setMessage("가로 전체 화면 파일이 업로드되었습니다.")
     } catch (uploadError) {
-      setError(
+      setFullUploadError(
         uploadError instanceof Error
           ? uploadError.message
           : "파일 업로드에 실패했습니다.",
@@ -197,7 +224,10 @@ export default function AdminDisplayPage() {
     const file = event.target.files?.[0]
     if (!file) return
 
-    setError("")
+    if (side === "left") setLeftUploadError("")
+    else setRightUploadError("")
+    setMessage("")
+
     try {
       const asset = await uploadDisplayAsset(
         file,
@@ -212,11 +242,12 @@ export default function AdminDisplayPage() {
         `${side === "left" ? "왼쪽" : "오른쪽"} 파일이 업로드되었습니다.`,
       )
     } catch (uploadError) {
-      setError(
+      const messageText =
         uploadError instanceof Error
           ? uploadError.message
-          : "파일 업로드에 실패했습니다.",
-      )
+          : "파일 업로드에 실패했습니다."
+      if (side === "left") setLeftUploadError(messageText)
+      else setRightUploadError(messageText)
     } finally {
       event.target.value = ""
     }
@@ -231,7 +262,7 @@ export default function AdminDisplayPage() {
   }) {
     setApplying(true)
     setMessage("")
-    setError("")
+    setApplyError("")
 
     try {
       const res = await fetch("/api/admin/display-settings", {
@@ -246,7 +277,7 @@ export default function AdminDisplayPage() {
       }
 
       if (!res.ok || !json.success) {
-        setError(json.error ?? "적용에 실패했습니다.")
+        setApplyError(json.error ?? "적용에 실패했습니다.")
         return
       }
 
@@ -254,7 +285,7 @@ export default function AdminDisplayPage() {
       setSelectedMode(payload.mode)
       setMessage("전광판 설정이 적용되었습니다. 30초 이내에 반영됩니다.")
     } catch {
-      setError("적용 중 오류가 발생했습니다.")
+      setApplyError("적용 중 오류가 발생했습니다.")
     } finally {
       setApplying(false)
     }
@@ -265,33 +296,33 @@ export default function AdminDisplayPage() {
   }
 
   async function handleApplyMediaFull() {
-    if (!fullAsset) {
-      setError("가로 전체 화면 파일을 먼저 업로드해 주세요.")
+    if (!isUsableAsset(fullAsset)) {
+      setApplyError("가로 전체 화면 파일을 먼저 정상 업로드해 주세요.")
       return
     }
 
     await applySettings({
       mode: "media_full",
-      media_full_file_id: fullAsset.id,
+      media_full_file_id: fullAsset!.id,
     })
   }
 
   async function handleApplyMediaSplit() {
-    if (!leftAsset || !rightAsset) {
-      setError("왼쪽/오른쪽 파일을 모두 업로드해 주세요.")
+    if (!isUsableAsset(leftAsset) || !isUsableAsset(rightAsset)) {
+      setApplyError("왼쪽/오른쪽 파일을 모두 정상 업로드해 주세요.")
       return
     }
 
     await applySettings({
       mode: "media_split",
-      media_left_file_id: leftAsset.id,
-      media_right_file_id: rightAsset.id,
+      media_left_file_id: leftAsset!.id,
+      media_right_file_id: rightAsset!.id,
     })
   }
 
   async function handleApplyNotice() {
     if (!activeNoticeId) {
-      setError("표시할 공지사항을 선택해 주세요.")
+      setApplyError("표시할 공지사항을 선택해 주세요.")
       return
     }
 
@@ -309,6 +340,9 @@ export default function AdminDisplayPage() {
   const currentModeLabel = settings
     ? DISPLAY_MODE_LABELS[settings.mode]
     : "랭킹 화면"
+
+  const canApplyFull = isUsableAsset(fullAsset)
+  const canApplySplit = isUsableAsset(leftAsset) && isUsableAsset(rightAsset)
 
   return (
     <>
@@ -332,8 +366,8 @@ export default function AdminDisplayPage() {
       {message ? (
         <div className={`${styles.message} ${styles.messageSuccess}`}>{message}</div>
       ) : null}
-      {error ? (
-        <div className={`${styles.message} ${styles.messageError}`}>{error}</div>
+      {applyError ? (
+        <div className={`${styles.message} ${styles.messageError}`}>{applyError}</div>
       ) : null}
 
       <div className={styles.cardGrid}>
@@ -355,15 +389,28 @@ export default function AdminDisplayPage() {
           <p className={styles.cardDesc}>이미지 또는 PDF 1개를 전체 화면에 표시합니다.</p>
           <input
             type="file"
-            accept="image/png,image/jpeg,image/webp,application/pdf"
+            accept=".jpg,.jpeg,.png,.webp,.pdf,image/png,image/jpeg,image/webp,application/pdf"
             onChange={handleFullUpload}
           />
-          <AssetPreview asset={fullAsset} />
+          {fullUploadError ? (
+            <div className={`${styles.message} ${styles.messageError}`} style={{ marginTop: 8 }}>
+              {fullUploadError}
+            </div>
+          ) : null}
+          <UploadHint
+            asset={fullAsset}
+            emptyText="파일을 선택하면 미리보기가 표시됩니다."
+          />
+          {isUsableAsset(fullAsset) ? (
+            <div style={{ marginTop: 12 }}>
+              <ScenePreviewFrame mode="media_full" fullAsset={fullAsset} />
+            </div>
+          ) : null}
           <div className={styles.buttonRow} style={{ marginTop: 12 }}>
             <button
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
-              disabled={applying}
+              disabled={applying || !canApplyFull}
               onClick={handleApplyMediaFull}
             >
               적용
@@ -378,25 +425,50 @@ export default function AdminDisplayPage() {
             <label className={styles.formLabel}>왼쪽 파일</label>
             <input
               type="file"
-              accept="image/png,image/jpeg,image/webp,application/pdf"
+              accept=".jpg,.jpeg,.png,.webp,.pdf,image/png,image/jpeg,image/webp,application/pdf"
               onChange={(event) => handleSplitUpload("left", event)}
             />
-            <AssetPreview asset={leftAsset} />
+            {leftUploadError ? (
+              <div className={`${styles.message} ${styles.messageError}`} style={{ marginTop: 8 }}>
+                {leftUploadError}
+              </div>
+            ) : null}
+            <UploadHint
+              asset={leftAsset}
+              emptyText="왼쪽 파일을 선택하면 미리보기가 표시됩니다."
+            />
           </div>
           <div className={styles.formGroup}>
             <label className={styles.formLabel}>오른쪽 파일</label>
             <input
               type="file"
-              accept="image/png,image/jpeg,image/webp,application/pdf"
+              accept=".jpg,.jpeg,.png,.webp,.pdf,image/png,image/jpeg,image/webp,application/pdf"
               onChange={(event) => handleSplitUpload("right", event)}
             />
-            <AssetPreview asset={rightAsset} />
+            {rightUploadError ? (
+              <div className={`${styles.message} ${styles.messageError}`} style={{ marginTop: 8 }}>
+                {rightUploadError}
+              </div>
+            ) : null}
+            <UploadHint
+              asset={rightAsset}
+              emptyText="오른쪽 파일을 선택하면 미리보기가 표시됩니다."
+            />
           </div>
+          {isUsableAsset(leftAsset) || isUsableAsset(rightAsset) ? (
+            <div style={{ marginTop: 12 }}>
+              <ScenePreviewFrame
+                mode="media_split"
+                leftAsset={leftAsset}
+                rightAsset={rightAsset}
+              />
+            </div>
+          ) : null}
           <div className={styles.buttonRow}>
             <button
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
-              disabled={applying}
+              disabled={applying || !canApplySplit}
               onClick={handleApplyMediaSplit}
             >
               적용
