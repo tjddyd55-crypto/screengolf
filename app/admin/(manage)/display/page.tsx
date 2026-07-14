@@ -12,10 +12,17 @@ import DisplayMediaRenderer from "@/components/display/DisplayMediaRenderer"
 type DisplayAsset = {
   id: number
   title: string
-  file_url: string
-  file_type: "image" | "pdf"
-  mime_type: string
+  file_url?: string
+  fileUrl?: string
+  file_type?: "image" | "pdf"
+  fileType?: "image" | "pdf"
+  mime_type?: string
+  mimeType?: string
   layout_type: "full" | "split_left" | "split_right"
+  original_name?: string
+  originalName?: string
+  file_missing?: boolean
+  fileMissing?: boolean
 }
 
 type DisplaySettings = {
@@ -67,6 +74,11 @@ async function uploadDisplayAsset(
 function AssetPreview({ asset }: { asset: DisplayAsset | null }) {
   if (!asset) return null
 
+  const fileUrl = asset.file_url || asset.fileUrl || ""
+  const fileType = asset.file_type || asset.fileType || "image"
+  const mimeType = asset.mime_type || asset.mimeType || "image/png"
+  const missing = Boolean(asset.file_missing || asset.fileMissing)
+
   return (
     <div
       style={{
@@ -78,12 +90,32 @@ function AssetPreview({ asset }: { asset: DisplayAsset | null }) {
         background: "#0f172a",
       }}
     >
-      <DisplayMediaRenderer
-        fileUrl={asset.file_url}
-        fileType={asset.file_type}
-        mimeType={asset.mime_type}
-        variant={asset.layout_type === "full" ? "full" : "split"}
-      />
+      {missing ? (
+        <div
+          style={{
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#f87171",
+            fontSize: 14,
+            textAlign: "center",
+            padding: 12,
+          }}
+        >
+          원본 파일이 없어 다시 업로드가 필요합니다.
+        </div>
+      ) : (
+        <DisplayMediaRenderer
+          fileUrl={fileUrl}
+          fileType={fileType}
+          mimeType={mimeType}
+          title={asset.title}
+          variant={asset.layout_type === "full" ? "full" : "split"}
+          adminMode
+        />
+      )}
     </div>
   )
 }

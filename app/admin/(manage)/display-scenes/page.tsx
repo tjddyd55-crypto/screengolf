@@ -7,15 +7,22 @@ import {
   DISPLAY_MODE_LABELS,
   type DisplayMode,
 } from "@/lib/admin/constants"
-import DisplayMediaRenderer from "@/components/display/DisplayMediaRenderer"
+import ScenePreviewFrame from "@/components/display/ScenePreviewFrame"
 
 type DisplayAsset = {
   id: number
   title: string
   file_url: string
+  fileUrl?: string
   file_type: "image" | "pdf"
   mime_type: string
+  original_name?: string
+  originalName?: string
   layout_type: "full" | "split_left" | "split_right"
+  sizeLabel?: string | null
+  file_missing?: boolean
+  fileMissing?: boolean
+  status?: string
 }
 
 type DisplayScene = {
@@ -64,28 +71,20 @@ const EMPTY_FORM: SceneForm = {
   is_active: true,
 }
 
-function AssetPreview({ asset }: { asset: DisplayAsset | null }) {
-  if (!asset) return null
+function assetLabel(asset: DisplayAsset): string {
+  const original = asset.original_name || asset.originalName || ""
+  const format = (asset.mime_type || "").split("/")[1]?.toUpperCase() || ""
+  const size = asset.sizeLabel ? ` · ${asset.sizeLabel}` : ""
+  const status =
+    asset.file_missing || asset.fileMissing || asset.status === "missing"
+      ? " · 파일 누락"
+      : ""
+  return `${asset.title}${original ? ` (${original})` : ""}${format ? ` · ${format}` : ""}${size}${status}`
+}
 
-  return (
-    <div
-      style={{
-        marginTop: 8,
-        height: 120,
-        borderRadius: 8,
-        overflow: "hidden",
-        border: "1px solid rgba(255,255,255,0.12)",
-        background: "#0f172a",
-      }}
-    >
-      <DisplayMediaRenderer
-        fileUrl={asset.file_url}
-        fileType={asset.file_type}
-        mimeType={asset.mime_type}
-        variant={asset.layout_type === "full" ? "full" : "split"}
-      />
-    </div>
-  )
+function isAssetMissing(asset: DisplayAsset | null | undefined): boolean {
+  if (!asset) return true
+  return Boolean(asset.file_missing || asset.fileMissing || asset.status === "missing")
 }
 
 export default function AdminDisplayScenesPage() {
@@ -95,6 +94,8 @@ export default function AdminDisplayScenesPage() {
   const [form, setForm] = useState<SceneForm>(EMPTY_FORM)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [showModal, setShowModal] = useState(false)
+  const [previewScene, setPreviewScene] = useState<DisplayScene | null>(null)
+  const [showFormPreview, setShowFormPreview] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(true)
@@ -190,10 +191,33 @@ export default function AdminDisplayScenesPage() {
     }
   }
 
+  const selectedFullAsset = assets.find(
+    (asset) => asset.id === Number(form.media_full_file_id),
+  )
+  const selectedLeftAsset = assets.find(
+    (asset) => asset.id === Number(form.media_left_file_id),
+  )
+  const selectedRightAsset = assets.find(
+    (asset) => asset.id === Number(form.media_right_file_id),
+  )
+  const selectedNotice = notices.find(
+    (notice) => notice.id === Number(form.notice_id),
+  )
+
+  const formMediaInvalid =
+    (form.mode === "media_full" && isAssetMissing(selectedFullAsset)) ||
+    (form.mode === "media_split" &&
+      (isAssetMissing(selectedLeftAsset) || isAssetMissing(selectedRightAsset)))
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setMessage("")
     setError("")
+
+    if (formMediaInvalid) {
+      setError("선택한 파일을 불러올 수 없어 전광판에 적용할 수 없습니다.")
+      return
+    }
 
     try {
       const res = await fetch(
@@ -221,9 +245,20 @@ export default function AdminDisplayScenesPage() {
     }
   }
 
-  async function handleApply(id: number) {
+  async function handleApply(scene: DisplayScene) {
     setError("")
-    const res = await fetch(`/api/admin/display-scenes/${id}/apply`, {
+
+    if (
+      (scene.mode === "media_full" && isAssetMissing(scene.media_full_asset)) ||
+      (scene.mode === "media_split" &&
+        (isAssetMissing(scene.media_left_asset) ||
+          isAssetMissing(scene.media_right_asset)))
+    ) {
+      setError("선택한 파일을 불러올 수 없어 전광판에 적용할 수 없습니다.")
+      return
+    }
+
+    const res = await fetch(`/api/admin/display-scenes/${scene.id}/apply`, {
       method: "POST",
     })
     const json = (await res.json()) as { success?: boolean; error?: string }
@@ -270,16 +305,6 @@ export default function AdminDisplayScenesPage() {
     setMessage("Scene이 비활성 처리되었습니다.")
     await loadData()
   }
-
-  const selectedFullAsset = assets.find(
-    (asset) => asset.id === Number(form.media_full_file_id),
-  )
-  const selectedLeftAsset = assets.find(
-    (asset) => asset.id === Number(form.media_left_file_id),
-  )
-  const selectedRightAsset = assets.find(
-    (asset) => asset.id === Number(form.media_right_file_id),
-  )
 
   if (loading) {
     return <p>불러오는 중...</p>
@@ -342,26 +367,32 @@ export default function AdminDisplayScenesPage() {
               <p style={{ color: "#cbd5e1", fontSize: 14, margin: "0 0 12px" }}>
                 {scene.summary}
               </p>
-              {scene.media_full_asset ? (
-                <AssetPreview asset={scene.media_full_asset} />
-              ) : null}
-              {scene.media_left_asset || scene.media_right_asset ? (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  {scene.media_left_asset ? (
-                    <AssetPreview asset={scene.media_left_asset} />
-                  ) : null}
-                  {scene.media_right_asset ? (
-                    <AssetPreview asset={scene.media_right_asset} />
-                  ) : null}
+
+              {(scene.mode === "media_full" || scene.mode === "media_split") && (
+                <div style={{ marginBottom: 12 }}>
+                  <ScenePreviewFrame
+                    mode={scene.mode}
+                    fullAsset={scene.media_full_asset}
+                    leftAsset={scene.media_left_asset}
+                    rightAsset={scene.media_right_asset}
+                  />
                 </div>
-              ) : null}
+              )}
+
               <div className={styles.buttonRow} style={{ marginTop: 12 }}>
                 <button
                   type="button"
                   className={`${styles.btn} ${styles.btnPrimary}`}
-                  onClick={() => handleApply(scene.id)}
+                  onClick={() => handleApply(scene)}
                 >
                   적용
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.btn} ${styles.btnSecondary}`}
+                  onClick={() => setPreviewScene(scene)}
+                >
+                  미리보기
                 </button>
                 <button
                   type="button"
@@ -394,7 +425,7 @@ export default function AdminDisplayScenesPage() {
 
       {showModal ? (
         <div className={styles.modalOverlay}>
-          <div className={styles.modal}>
+          <div className={styles.modal} style={{ maxWidth: 720 }}>
             <h3 className={styles.modalTitle}>
               {editingId ? "Scene 수정" : "Scene 추가"}
             </h3>
@@ -459,11 +490,10 @@ export default function AdminDisplayScenesPage() {
                     <option value="">파일 선택</option>
                     {fullAssets.map((asset) => (
                       <option key={asset.id} value={asset.id}>
-                        {asset.title}
+                        {assetLabel(asset)}
                       </option>
                     ))}
                   </select>
-                  <AssetPreview asset={selectedFullAsset ?? null} />
                 </div>
               ) : null}
 
@@ -482,11 +512,10 @@ export default function AdminDisplayScenesPage() {
                       <option value="">파일 선택</option>
                       {splitAssets.map((asset) => (
                         <option key={asset.id} value={asset.id}>
-                          {asset.title}
+                          {assetLabel(asset)}
                         </option>
                       ))}
                     </select>
-                    <AssetPreview asset={selectedLeftAsset ?? null} />
                   </div>
                   <div className={styles.formGroup}>
                     <label className={styles.formLabel}>오른쪽 파일</label>
@@ -501,14 +530,34 @@ export default function AdminDisplayScenesPage() {
                       <option value="">파일 선택</option>
                       {splitAssets.map((asset) => (
                         <option key={asset.id} value={asset.id}>
-                          {asset.title}
+                          {assetLabel(asset)}
                         </option>
                       ))}
                     </select>
-                    <AssetPreview asset={selectedRightAsset ?? null} />
                   </div>
                 </>
               ) : null}
+
+              {(form.mode === "media_full" ||
+                form.mode === "media_split" ||
+                form.mode === "ranking" ||
+                form.mode === "notice") && (
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>실시간 미리보기</label>
+                  <ScenePreviewFrame
+                    mode={form.mode}
+                    fullAsset={selectedFullAsset ?? null}
+                    leftAsset={selectedLeftAsset ?? null}
+                    rightAsset={selectedRightAsset ?? null}
+                    noticeTitle={selectedNotice?.title}
+                  />
+                  {formMediaInvalid ? (
+                    <p style={{ color: "#f87171", fontSize: 13, marginTop: 8 }}>
+                      선택한 파일을 불러올 수 없어 전광판에 적용할 수 없습니다.
+                    </p>
+                  ) : null}
+                </div>
+              )}
 
               <div className={styles.formGroup}>
                 <label className={styles.formLabel}>정렬 순서</label>
@@ -533,8 +582,19 @@ export default function AdminDisplayScenesPage() {
                 </label>
               </div>
               <div className={styles.buttonRow}>
-                <button type="submit" className={`${styles.btn} ${styles.btnPrimary}`}>
+                <button
+                  type="submit"
+                  className={`${styles.btn} ${styles.btnPrimary}`}
+                  disabled={formMediaInvalid}
+                >
                   저장
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.btn} ${styles.btnSecondary}`}
+                  onClick={() => setShowFormPreview(true)}
+                >
+                  미리보기
                 </button>
                 <button
                   type="button"
@@ -545,6 +605,56 @@ export default function AdminDisplayScenesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      ) : null}
+
+      {previewScene ? (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modal} style={{ maxWidth: 960 }}>
+            <h3 className={styles.modalTitle}>
+              미리보기 · {previewScene.name}
+            </h3>
+            <ScenePreviewFrame
+              mode={previewScene.mode}
+              fullAsset={previewScene.media_full_asset}
+              leftAsset={previewScene.media_left_asset}
+              rightAsset={previewScene.media_right_asset}
+              noticeTitle={previewScene.notice_title}
+            />
+            <div className={styles.buttonRow} style={{ marginTop: 16 }}>
+              <button
+                type="button"
+                className={`${styles.btn} ${styles.btnSecondary}`}
+                onClick={() => setPreviewScene(null)}
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showFormPreview ? (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modal} style={{ maxWidth: 960 }}>
+            <h3 className={styles.modalTitle}>적용 전 미리보기</h3>
+            <ScenePreviewFrame
+              mode={form.mode}
+              fullAsset={selectedFullAsset ?? null}
+              leftAsset={selectedLeftAsset ?? null}
+              rightAsset={selectedRightAsset ?? null}
+              noticeTitle={selectedNotice?.title}
+            />
+            <div className={styles.buttonRow} style={{ marginTop: 16 }}>
+              <button
+                type="button"
+                className={`${styles.btn} ${styles.btnSecondary}`}
+                onClick={() => setShowFormPreview(false)}
+              >
+                닫기
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

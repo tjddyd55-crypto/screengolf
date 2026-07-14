@@ -40,7 +40,7 @@ function resolveFromSource(source: DisplaySource): DisplayStatePayload | null {
 
   if (source.mode === "media_full" && source.media_full_file_id) {
     const asset = getDisplayAssetById(source.media_full_file_id)
-    if (asset) {
+    if (asset && !asset.file_missing) {
       return {
         mode: "media_full",
         scene,
@@ -57,7 +57,7 @@ function resolveFromSource(source: DisplaySource): DisplayStatePayload | null {
   ) {
     const left = getDisplayAssetById(source.media_left_file_id)
     const right = getDisplayAssetById(source.media_right_file_id)
-    if (left && right) {
+    if (left && right && !left.file_missing && !right.file_missing) {
       return {
         mode: "media_split",
         scene,

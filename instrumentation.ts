@@ -3,6 +3,10 @@ export async function register() {
     const { logRankingStorageStartup } = await import(
       "@/lib/sg-ranking/storage-startup"
     )
+    const { logDisplayStorageStartup } = await import(
+      "@/lib/storage/display-startup"
+    )
     logRankingStorageStartup()
+    logDisplayStorageStartup()
   }
 }

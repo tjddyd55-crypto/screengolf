@@ -6,9 +6,13 @@ export type DisplaySceneRef = {
 }
 
 export type DisplayMediaPayload = {
+  id?: number
+  title?: string
+  originalName?: string
   fileUrl: string
   fileType: "image" | "pdf"
   mimeType: string
+  fileMissing?: boolean
 }
 
 export type DisplayStatePayload =

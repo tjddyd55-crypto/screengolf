@@ -34,7 +34,11 @@ export async function DELETE(_request: Request, context: RouteContext) {
       )
     }
 
-    await deleteDisplayFile(deleted.file_url)
+    if (deleted.stored_name) {
+      await deleteDisplayFile(deleted.stored_name)
+    } else {
+      await deleteDisplayFile(deleted.file_url)
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

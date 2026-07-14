@@ -44,8 +44,41 @@ export function getRankingSnapshotJsonPath(): string {
   return path.join(getDataDir(), "monthly-ranking-snapshots.json")
 }
 
+export function getDisplayAssetDir(): string {
+  const configured = process.env.DISPLAY_ASSET_DIR?.trim()
+  if (configured) {
+    return resolvePath(configured)
+  }
+
+  return path.join(getDataDir(), "display-assets")
+}
+
+export function ensureDisplayAssetDir(): string {
+  const assetDir = getDisplayAssetDir()
+
+  if (!fs.existsSync(assetDir)) {
+    fs.mkdirSync(assetDir, { recursive: true })
+  }
+
+  const probePath = path.join(assetDir, ".write-probe")
+  try {
+    fs.writeFileSync(probePath, "ok", "utf8")
+    fs.unlinkSync(probePath)
+  } catch (error) {
+    throw new Error(
+      `[display-storage] DISPLAY_ASSET_DIR 쓰기 불가: ${assetDir} (${error instanceof Error ? error.message : String(error)})`,
+    )
+  }
+
+  return assetDir
+}
+
 export function isPersistentVolumeConfigured(): boolean {
-  return Boolean(process.env.DATA_DIR?.trim() || process.env.STORE_DB_PATH?.trim())
+  return Boolean(
+    process.env.DATA_DIR?.trim() ||
+      process.env.STORE_DB_PATH?.trim() ||
+      process.env.DISPLAY_ASSET_DIR?.trim(),
+  )
 }
 
 export function ensureDataDir(): string {
