@@ -1,6 +1,7 @@
 import {
   getStoreGoogleContactById,
 } from "@/lib/db/store-google-contacts"
+import { getDb } from "@/lib/db/sqlite"
 import {
   cancelStoreSmsCampaign,
   claimStoreSmsCampaign,
@@ -213,10 +214,21 @@ function shouldExcludeBeforeSend(recipient: {
   if (recipient.google_contact_id == null) {
     return { exclude: false, reason: null }
   }
-  const contact = getStoreGoogleContactById(recipient.google_contact_id)
-  if (!contact) return { exclude: false, reason: null }
-  if (!contact.is_active) return { exclude: true, reason: "inactive" }
-  if (contact.sms_opt_out) return { exclude: true, reason: "sms_opt_out" }
+
+  // 발송 worker마다 최신 수신거부/활성 상태를 DB에서 직접 재조회한다.
+  const row = getDb()
+    .prepare(
+      `SELECT is_active, sms_opt_out
+       FROM store_google_contacts
+       WHERE id = ?`,
+    )
+    .get(recipient.google_contact_id) as
+    | { is_active: number; sms_opt_out: number }
+    | undefined
+
+  if (!row) return { exclude: false, reason: null }
+  if (row.is_active !== 1) return { exclude: true, reason: "inactive" }
+  if (row.sms_opt_out === 1) return { exclude: true, reason: "sms_opt_out" }
   return { exclude: false, reason: null }
 }
 
