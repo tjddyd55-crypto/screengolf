@@ -339,6 +339,8 @@ function initializeSchema(database: Database.Database): void {
     migrateStoreMembersIfNeeded(database)
   }
 
+  migrateGoogleContactsIfNeeded(database)
+
   const existing = database
     .prepare("SELECT id FROM display_settings WHERE id = 1")
     .get()
@@ -350,4 +352,110 @@ function initializeSchema(database: Database.Database): void {
       )
       .run()
   }
+}
+
+function migrateGoogleContactsIfNeeded(database: Database.Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS google_contacts_connections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      google_account_email TEXT,
+      access_token_encrypted TEXT,
+      refresh_token_encrypted TEXT NOT NULL,
+      token_expires_at TEXT,
+      scope TEXT NOT NULL,
+      token_type TEXT,
+      connected_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_synced_at TEXT,
+      last_sync_status TEXT,
+      last_sync_message TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS google_contacts_sync_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      started_at TEXT NOT NULL,
+      completed_at TEXT,
+      group_name TEXT NOT NULL,
+      group_resource_name TEXT,
+      google_contact_count INTEGER NOT NULL DEFAULT 0,
+      created_count INTEGER NOT NULL DEFAULT 0,
+      updated_count INTEGER NOT NULL DEFAULT 0,
+      unchanged_count INTEGER NOT NULL DEFAULT 0,
+      skipped_count INTEGER NOT NULL DEFAULT 0,
+      failed_count INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL CHECK (status IN ('success', 'partial', 'failed')),
+      message TEXT,
+      details_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `)
+
+  const columns = database
+    .prepare("PRAGMA table_info(store_members)")
+    .all() as { name: string }[]
+  const names = new Set(columns.map((c) => c.name))
+
+  const additions: Array<{ name: string; sql: string }> = [
+    {
+      name: "google_resource_name",
+      sql: "ALTER TABLE store_members ADD COLUMN google_resource_name TEXT",
+    },
+    {
+      name: "google_contact_etag",
+      sql: "ALTER TABLE store_members ADD COLUMN google_contact_etag TEXT",
+    },
+    {
+      name: "google_synced_at",
+      sql: "ALTER TABLE store_members ADD COLUMN google_synced_at TEXT",
+    },
+    {
+      name: "google_sync_status",
+      sql: "ALTER TABLE store_members ADD COLUMN google_sync_status TEXT",
+    },
+    {
+      name: "normalized_phone",
+      sql: "ALTER TABLE store_members ADD COLUMN normalized_phone TEXT",
+    },
+  ]
+
+  for (const column of additions) {
+    if (!names.has(column.name)) {
+      database.exec(column.sql)
+    }
+  }
+
+  database.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_store_members_google_resource_name
+      ON store_members(google_resource_name)
+      WHERE google_resource_name IS NOT NULL;
+
+    CREATE INDEX IF NOT EXISTS idx_store_members_normalized_phone
+      ON store_members(normalized_phone)
+      WHERE normalized_phone IS NOT NULL;
+
+    CREATE TABLE IF NOT EXISTS store_google_contacts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      google_resource_name TEXT NOT NULL UNIQUE,
+      google_contact_etag TEXT,
+      name TEXT NOT NULL,
+      nickname TEXT,
+      phone TEXT NOT NULL,
+      normalized_phone TEXT NOT NULL,
+      google_group_name TEXT NOT NULL,
+      google_sync_status TEXT NOT NULL DEFAULT 'linked',
+      is_active INTEGER NOT NULL DEFAULT 1,
+      memo TEXT,
+      sms_opt_out INTEGER NOT NULL DEFAULT 0,
+      last_synced_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_store_google_contacts_normalized_phone
+      ON store_google_contacts(normalized_phone);
+
+    CREATE INDEX IF NOT EXISTS idx_store_google_contacts_sync_status
+      ON store_google_contacts(google_sync_status);
+  `)
 }

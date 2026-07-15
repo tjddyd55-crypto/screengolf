@@ -73,10 +73,66 @@
   padding: 24px;
 }
 
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 16px;
+  color: #38bdf8;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
 .pageTitle {
   font-size: 24px;
   font-weight: 700;
   margin: 0 0 20px;
+}
+
+.formHint {
+  margin: 8px 0 0;
+  color: #94a3b8;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.googlePanel {
+  margin-bottom: 20px;
+}
+
+.googlePanelTitle {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.googleMeta {
+  margin: 0 0 4px;
+  color: #cbd5e1;
+  font-size: 14px;
+}
+
+.googleActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.syncResultRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: #cbd5e1;
 }
 
 .formGroup {
@@ -203,6 +259,18 @@
   gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 16px;
+}
+
+.filterInput,
+.filterSelect {
+  max-width: 240px;
+}
+
+.tableCellEllipsis {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .loginWrap {

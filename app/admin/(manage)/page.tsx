@@ -22,6 +22,12 @@ export default function AdminHomePage() {
           <h3 className={styles.cardTitle}>회원관리</h3>
           <p className={styles.cardDesc}>정액 회원 정보와 만기일을 관리합니다.</p>
         </Link>
+        <Link href="/admin/google-contacts" className={styles.card}>
+          <h3 className={styles.cardTitle}>고객 연락처</h3>
+          <p className={styles.cardDesc}>
+            Google 연락처(가자 스크린)를 연동·동기화합니다.
+          </p>
+        </Link>
         <Link href="/admin/plan-types" className={styles.card}>
           <h3 className={styles.cardTitle}>요금제 관리</h3>
           <p className={styles.cardDesc}>회원 요금제 마스터를 등록·수정합니다.</p>
