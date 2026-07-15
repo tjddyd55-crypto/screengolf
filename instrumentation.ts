@@ -6,7 +6,11 @@ export async function register() {
     const { logDisplayStorageStartup } = await import(
       "@/lib/storage/display-startup"
     )
+    const { startStoreSmsCron } = await import(
+      "@/lib/store-sms/store-sms-cron"
+    )
     logRankingStorageStartup()
     logDisplayStorageStartup()
+    startStoreSmsCron()
   }
 }

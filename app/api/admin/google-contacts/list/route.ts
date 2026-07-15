@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server"
 import {
-  listStoreGoogleContacts,
+  listStoreGoogleContactsPage,
   type GoogleContactFilter,
 } from "@/lib/db/store-google-contacts"
 
 export const dynamic = "force-dynamic"
 
-function parseFilter(value: string | null): GoogleContactFilter {
+function parseStatus(value: string | null): GoogleContactFilter | "all" {
   if (
     value === "linked" ||
     value === "not_in_group" ||
@@ -19,13 +19,39 @@ function parseFilter(value: string | null): GoogleContactFilter {
   return "all"
 }
 
+function parseOptionalBoolean(value: string | null): boolean | undefined {
+  if (value == null || value === "") return undefined
+  if (value === "true" || value === "1") return true
+  if (value === "false" || value === "0") return false
+  return undefined
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const search = searchParams.get("search") ?? undefined
-    const filter = parseFilter(searchParams.get("filter"))
-    const data = listStoreGoogleContacts({ search, filter })
-    return NextResponse.json({ success: true, data })
+    const query =
+      searchParams.get("query") ?? searchParams.get("search") ?? undefined
+    const legacyFilter = searchParams.get("filter")
+    const status = parseStatus(searchParams.get("status") ?? legacyFilter)
+    const smsOptOut = parseOptionalBoolean(searchParams.get("smsOptOut"))
+    const isActive = parseOptionalBoolean(searchParams.get("isActive"))
+    const page = Number(searchParams.get("page") ?? 1)
+    const pageSize = Number(searchParams.get("pageSize") ?? 50)
+
+    const result = listStoreGoogleContactsPage({
+      query,
+      status,
+      smsOptOut,
+      isActive,
+      page: Number.isFinite(page) ? page : 1,
+      pageSize: Number.isFinite(pageSize) ? pageSize : 50,
+    })
+
+    return NextResponse.json({
+      success: true,
+      data: result.data,
+      pagination: result.pagination,
+    })
   } catch (error) {
     console.error("[google-contacts/list] GET failed:", error)
     return NextResponse.json(

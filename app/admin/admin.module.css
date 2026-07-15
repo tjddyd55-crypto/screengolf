@@ -273,6 +273,143 @@
   white-space: nowrap;
 }
 
+.contactsToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.contactsToolbarLeft,
+.contactsToolbarRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.contactsTable {
+  min-width: 1120px;
+  table-layout: fixed;
+}
+
+.contactsTable th,
+.contactsTable td {
+  padding: 12px 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  min-width: 0;
+}
+
+.contactsTable tbody tr {
+  height: 64px;
+}
+
+.colCheck { width: 44px; }
+.colName { width: 22%; }
+.colNickname { width: 18%; }
+.colPhone { width: 150px; }
+.colStatus { width: 130px; }
+.colSynced { width: 170px; }
+.colOptOut { width: 110px; }
+.colActions { width: 150px; }
+
+.rowActions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.rowActions .btn {
+  height: 38px;
+  padding: 0 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.paginationBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.paginationControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.modeBanner {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.modeBannerTest {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fcd34d;
+}
+
+.modeBannerLive {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.summaryItem {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.summaryLabel {
+  margin: 0 0 4px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.summaryValue {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.subNav {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.subNav a {
+  color: #94a3b8;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.subNav a:hover,
+.subNavActive {
+  color: #38bdf8;
+}
+
 .loginWrap {
   min-height: 100vh;
   display: flex;

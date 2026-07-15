@@ -28,6 +28,12 @@ export default function AdminHomePage() {
             Google 연락처(가자 스크린)를 연동·동기화합니다.
           </p>
         </Link>
+        <Link href="/admin/sms" className={styles.card}>
+          <h3 className={styles.cardTitle}>문자 발송</h3>
+          <p className={styles.cardDesc}>
+            고객 연락처를 선택해 즉시 또는 예약문자를 발송합니다.
+          </p>
+        </Link>
         <Link href="/admin/plan-types" className={styles.card}>
           <h3 className={styles.cardTitle}>요금제 관리</h3>
           <p className={styles.cardDesc}>회원 요금제 마스터를 등록·수정합니다.</p>

@@ -1,8 +1,8 @@
 "use client"
 
-import { FormEvent, Suspense, useCallback, useEffect, useState } from "react"
+import { FormEvent, Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import styles from "../../admin.module.css"
 
 type GoogleStatus = {
@@ -38,6 +38,13 @@ type SyncSummary = {
   message?: string
 }
 
+type Pagination = {
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+}
+
 const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
   config_missing: "Google 연락처 환경변수가 설정되지 않았습니다.",
   connect_failed: "Google 연결을 시작하지 못했습니다.",
@@ -56,12 +63,41 @@ function syncStatusLabel(status: string): string {
   return status
 }
 
+function formatPhoneDisplay(phone: string): string {
+  const digits = phone.replace(/\D/g, "")
+  if (digits.length === 11 && digits.startsWith("010")) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`
+  }
+  if (digits.length === 10 && digits.startsWith("01")) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`
+  }
+  return phone || "-"
+}
+
+function formatSyncedAt(value: string | null): string {
+  if (!value) return "-"
+  const match = value.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/)
+  if (match) return `${match[1]} ${match[2]}`
+  return value.slice(0, 16).replace("T", " ")
+}
+
 function GoogleContactsPageInner() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const [googleStatus, setGoogleStatus] = useState<GoogleStatus | null>(null)
   const [contacts, setContacts] = useState<Contact[]>([])
+  const [pagination, setPagination] = useState<Pagination>({
+    page: 1,
+    pageSize: 50,
+    total: 0,
+    totalPages: 1,
+  })
   const [search, setSearch] = useState("")
+  const [appliedSearch, setAppliedSearch] = useState("")
   const [filter, setFilter] = useState("all")
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [syncing, setSyncing] = useState(false)
@@ -95,14 +131,21 @@ function GoogleContactsPageInner() {
 
   const loadContacts = useCallback(async () => {
     const params = new URLSearchParams()
-    if (search.trim()) params.set("search", search.trim())
-    if (filter !== "all") params.set("filter", filter)
+    if (appliedSearch.trim()) params.set("query", appliedSearch.trim())
+    if (filter !== "all") params.set("status", filter)
+    params.set("page", String(page))
+    params.set("pageSize", String(pageSize))
     const res = await fetch(
       `/api/admin/google-contacts/list?${params.toString()}`,
     )
-    const json = (await res.json()) as { data?: Contact[] }
+    const json = (await res.json()) as {
+      data?: Contact[]
+      pagination?: Pagination
+    }
     setContacts(json.data ?? [])
-  }, [search, filter])
+    if (json.pagination) setPagination(json.pagination)
+    setSelectedIds([])
+  }, [appliedSearch, filter, page, pageSize])
 
   useEffect(() => {
     loadGoogleStatus()
@@ -126,6 +169,56 @@ function GoogleContactsPageInner() {
       )
     }
   }, [searchParams, loadGoogleStatus])
+
+  const pageIds = useMemo(() => contacts.map((c) => c.id), [contacts])
+  const allPageSelected =
+    pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id))
+
+  function toggleSelectAllPage() {
+    if (allPageSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !pageIds.includes(id)))
+      return
+    }
+    setSelectedIds((prev) => [...new Set([...prev, ...pageIds])])
+  }
+
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+    )
+  }
+
+  async function createDraftAndCompose(input: {
+    type: "selected" | "filtered_all"
+    contactIds?: number[]
+  }) {
+    setError("")
+    const res = await fetch("/api/admin/store-sms/drafts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        input.type === "selected"
+          ? { type: "selected", contactIds: input.contactIds }
+          : {
+              type: "filtered_all",
+              filter: {
+                query: appliedSearch.trim() || undefined,
+                status: filter,
+              },
+            },
+      ),
+    })
+    const json = (await res.json()) as {
+      success?: boolean
+      draftId?: number
+      error?: string
+    }
+    if (!res.ok || !json.success || !json.draftId) {
+      setError(json.error ?? "문자 작성 화면으로 이동하지 못했습니다.")
+      return
+    }
+    router.push(`/admin/sms/compose?draftId=${json.draftId}`)
+  }
 
   async function handleSync() {
     setSyncing(true)
@@ -327,38 +420,86 @@ function GoogleContactsPageInner() {
         <div className={`${styles.message} ${styles.messageError}`}>{error}</div>
       ) : null}
 
-      <div className={styles.filterRow}>
-        <input
-          className={`${styles.formInput} ${styles.filterInput}`}
-          placeholder="이름 / 닉네임 / 연락처 검색"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <select
-          className={`${styles.formSelect} ${styles.filterSelect}`}
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        >
-          <option value="all">전체</option>
-          <option value="linked">정상 연동</option>
-          <option value="not_in_group">라벨 제외</option>
-          <option value="conflict">충돌</option>
-          <option value="missing_phone">연락처 없음</option>
-          <option value="sms_opt_out">문자 수신거부</option>
-        </select>
-        <button
-          type="button"
-          className={`${styles.btn} ${styles.btnSecondary}`}
-          onClick={loadContacts}
-        >
-          검색
-        </button>
+      <div className={styles.contactsToolbar}>
+        <div className={styles.contactsToolbarLeft}>
+          <input
+            className={`${styles.formInput} ${styles.filterInput}`}
+            placeholder="이름 / 닉네임 / 연락처 검색"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select
+            className={`${styles.formSelect} ${styles.filterSelect}`}
+            value={filter}
+            onChange={(e) => {
+              setFilter(e.target.value)
+              setPage(1)
+            }}
+          >
+            <option value="all">전체</option>
+            <option value="linked">정상 연동</option>
+            <option value="not_in_group">라벨 제외</option>
+            <option value="conflict">충돌</option>
+            <option value="missing_phone">연락처 없음</option>
+            <option value="sms_opt_out">문자 수신거부</option>
+          </select>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnSecondary}`}
+            onClick={() => {
+              setAppliedSearch(search)
+              setPage(1)
+            }}
+          >
+            검색
+          </button>
+        </div>
+        <div className={styles.contactsToolbarRight}>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            disabled={selectedIds.length === 0}
+            onClick={() =>
+              createDraftAndCompose({
+                type: "selected",
+                contactIds: selectedIds,
+              })
+            }
+          >
+            선택 문자 작성 ({selectedIds.length})
+          </button>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnSecondary}`}
+            onClick={() => createDraftAndCompose({ type: "filtered_all" })}
+          >
+            검색 결과 전체 문자 작성
+          </button>
+        </div>
       </div>
 
       <div className={`${styles.panel} ${styles.tableWrap}`}>
-        <table className={styles.table}>
+        <table className={`${styles.table} ${styles.contactsTable}`}>
+          <colgroup>
+            <col className={styles.colCheck} />
+            <col className={styles.colName} />
+            <col className={styles.colNickname} />
+            <col className={styles.colPhone} />
+            <col className={styles.colStatus} />
+            <col className={styles.colSynced} />
+            <col className={styles.colOptOut} />
+            <col className={styles.colActions} />
+          </colgroup>
           <thead>
             <tr>
+              <th>
+                <input
+                  type="checkbox"
+                  checked={allPageSelected}
+                  onChange={toggleSelectAllPage}
+                  aria-label="현재 페이지 전체 선택"
+                />
+              </th>
               <th>이름</th>
               <th>닉네임</th>
               <th>연락처</th>
@@ -371,12 +512,20 @@ function GoogleContactsPageInner() {
           <tbody>
             {contacts.length === 0 ? (
               <tr>
-                <td colSpan={7}>동기화된 연락처가 없습니다.</td>
+                <td colSpan={8}>동기화된 연락처가 없습니다.</td>
               </tr>
             ) : (
               contacts.map((contact) => (
                 <tr key={contact.id}>
-                  <td className={styles.tableCellEllipsis} title={contact.name}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(contact.id)}
+                      onChange={() => toggleSelect(contact.id)}
+                      aria-label={`${contact.name} 선택`}
+                    />
+                  </td>
+                  <td title={contact.name}>
                     {contact.name}
                     {!contact.is_active ? (
                       <>
@@ -389,13 +538,19 @@ function GoogleContactsPageInner() {
                       </>
                     ) : null}
                   </td>
-                  <td>{contact.nickname ?? "-"}</td>
-                  <td>{contact.phone}</td>
+                  <td title={contact.nickname ?? ""}>
+                    {contact.nickname ?? "-"}
+                  </td>
+                  <td title={contact.phone}>
+                    {formatPhoneDisplay(contact.phone)}
+                  </td>
                   <td>{syncStatusLabel(contact.google_sync_status)}</td>
-                  <td>{contact.last_synced_at ?? "-"}</td>
-                  <td>{contact.sms_opt_out ? "거부" : "-"}</td>
+                  <td title={contact.last_synced_at ?? ""}>
+                    {formatSyncedAt(contact.last_synced_at)}
+                  </td>
+                  <td>{contact.sms_opt_out ? "수신거부" : "수신 가능"}</td>
                   <td>
-                    <div className={styles.buttonRow}>
+                    <div className={styles.rowActions}>
                       <button
                         type="button"
                         className={`${styles.btn} ${styles.btnSecondary}`}
@@ -419,6 +574,45 @@ function GoogleContactsPageInner() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className={styles.paginationBar}>
+        <div>
+          총 {pagination.total.toLocaleString()}명 · {pagination.page}/
+          {pagination.totalPages} 페이지
+        </div>
+        <div className={styles.paginationControls}>
+          <select
+            className={`${styles.formSelect} ${styles.filterSelect}`}
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value))
+              setPage(1)
+            }}
+          >
+            <option value={30}>30명</option>
+            <option value={50}>50명</option>
+            <option value={100}>100명</option>
+          </select>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnSecondary}`}
+            disabled={pagination.page <= 1}
+            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+          >
+            이전
+          </button>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnSecondary}`}
+            disabled={pagination.page >= pagination.totalPages}
+            onClick={() =>
+              setPage((prev) => Math.min(pagination.totalPages, prev + 1))
+            }
+          >
+            다음
+          </button>
+        </div>
       </div>
 
       {editing ? (

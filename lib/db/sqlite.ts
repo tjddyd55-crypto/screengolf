@@ -340,6 +340,7 @@ function initializeSchema(database: Database.Database): void {
   }
 
   migrateGoogleContactsIfNeeded(database)
+  migrateStoreSmsIfNeeded(database)
 
   const existing = database
     .prepare("SELECT id FROM display_settings WHERE id = 1")
@@ -457,5 +458,90 @@ function migrateGoogleContactsIfNeeded(database: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_store_google_contacts_sync_status
       ON store_google_contacts(google_sync_status);
+  `)
+}
+
+function migrateStoreSmsIfNeeded(database: Database.Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS store_sms_campaigns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      send_mode TEXT NOT NULL CHECK (send_mode IN ('immediate', 'scheduled')),
+      scheduled_at TEXT,
+      timezone TEXT NOT NULL DEFAULT 'Asia/Seoul',
+      status TEXT NOT NULL CHECK (
+        status IN (
+          'draft', 'scheduled', 'processing', 'completed',
+          'partial', 'failed', 'cancelled'
+        )
+      ),
+      target_type TEXT NOT NULL CHECK (target_type IN ('selected', 'filtered_all')),
+      target_filter_json TEXT,
+      total_recipients INTEGER NOT NULL DEFAULT 0,
+      sendable_recipients INTEGER NOT NULL DEFAULT 0,
+      excluded_recipients INTEGER NOT NULL DEFAULT 0,
+      sent_count INTEGER NOT NULL DEFAULT 0,
+      success_count INTEGER NOT NULL DEFAULT 0,
+      failed_count INTEGER NOT NULL DEFAULT 0,
+      cancelled_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      started_at TEXT,
+      completed_at TEXT,
+      cancelled_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS store_sms_campaign_recipients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL,
+      google_contact_id INTEGER,
+      name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      normalized_phone TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (
+        status IN (
+          'pending', 'excluded', 'processing', 'success', 'failed', 'cancelled'
+        )
+      ),
+      exclusion_reason TEXT,
+      provider_message_id TEXT,
+      error_message TEXT,
+      sent_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (campaign_id) REFERENCES store_sms_campaigns(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS store_sms_dispatch_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL,
+      recipient_id INTEGER,
+      provider TEXT NOT NULL,
+      dry_run INTEGER NOT NULL DEFAULT 1,
+      request_summary_json TEXT NOT NULL,
+      response_summary_json TEXT,
+      status TEXT NOT NULL CHECK (status IN ('success', 'failed', 'dry_run')),
+      error_code TEXT,
+      error_message TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (campaign_id) REFERENCES store_sms_campaigns(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS store_sms_drafts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      target_type TEXT NOT NULL CHECK (target_type IN ('selected', 'filtered_all')),
+      contact_ids_json TEXT,
+      filter_json TEXT,
+      summary_json TEXT,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_store_sms_campaigns_status_scheduled
+      ON store_sms_campaigns(status, scheduled_at);
+
+    CREATE INDEX IF NOT EXISTS idx_store_sms_recipients_campaign_status
+      ON store_sms_campaign_recipients(campaign_id, status);
   `)
 }

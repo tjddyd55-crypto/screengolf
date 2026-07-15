@@ -61,37 +61,75 @@ const SELECT = `
   FROM store_google_contacts
 `
 
-export function listStoreGoogleContacts(options?: {
+export type StoreGoogleContactListQuery = {
+  query?: string
+  /** @deprecated use query */
   search?: string
+  status?: GoogleContactFilter | "all"
+  /** @deprecated use status / smsOptOut */
   filter?: GoogleContactFilter
-}): StoreGoogleContact[] {
-  const conditions: string[] = []
-  const params: string[] = []
+  smsOptOut?: boolean
+  isActive?: boolean
+}
 
-  const search = options?.search?.trim()
+export type StoreGoogleContactPagination = {
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+}
+
+function buildContactListWhere(options?: StoreGoogleContactListQuery): {
+  where: string
+  params: Array<string | number>
+} {
+  const conditions: string[] = []
+  const params: Array<string | number> = []
+
+  const search = (options?.query ?? options?.search)?.trim()
   if (search) {
     conditions.push("(name LIKE ? OR nickname LIKE ? OR phone LIKE ?)")
     const pattern = `%${search}%`
     params.push(pattern, pattern, pattern)
   }
 
-  const filter = options?.filter ?? "all"
-  if (filter === "linked") {
+  const legacyFilter = options?.filter
+  const status = options?.status ?? legacyFilter ?? "all"
+
+  if (status === "linked") {
     conditions.push("google_sync_status = 'linked'")
-    conditions.push("is_active = 1")
-  } else if (filter === "not_in_group") {
+  } else if (status === "not_in_group") {
     conditions.push("google_sync_status = 'not_in_group'")
-  } else if (filter === "conflict") {
+  } else if (status === "conflict") {
     conditions.push("google_sync_status = 'conflict'")
-  } else if (filter === "missing_phone") {
+  } else if (status === "missing_phone") {
     conditions.push("(phone = '' OR normalized_phone = '')")
-  } else if (filter === "sms_opt_out") {
+  } else if (status === "sms_opt_out" || legacyFilter === "sms_opt_out") {
     conditions.push("sms_opt_out = 1")
   }
 
-  const where =
-    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""
+  if (typeof options?.smsOptOut === "boolean") {
+    conditions.push("sms_opt_out = ?")
+    params.push(options.smsOptOut ? 1 : 0)
+  }
 
+  if (typeof options?.isActive === "boolean") {
+    conditions.push("is_active = ?")
+    params.push(options.isActive ? 1 : 0)
+  } else if (status === "linked") {
+    conditions.push("is_active = 1")
+  }
+
+  return {
+    where: conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "",
+    params,
+  }
+}
+
+export function listStoreGoogleContacts(
+  options?: StoreGoogleContactListQuery,
+): StoreGoogleContact[] {
+  const { where, params } = buildContactListWhere(options)
   const rows = getDb()
     .prepare(
       `${SELECT}
@@ -99,6 +137,70 @@ export function listStoreGoogleContacts(options?: {
        ORDER BY is_active DESC, name ASC, id ASC`,
     )
     .all(...params) as ContactRow[]
+
+  return rows.map(mapContact)
+}
+
+export function listStoreGoogleContactsPage(
+  options: StoreGoogleContactListQuery & {
+    page?: number
+    pageSize?: number
+  },
+): {
+  data: StoreGoogleContact[]
+  pagination: StoreGoogleContactPagination
+} {
+  const page = Math.max(1, Math.floor(options.page ?? 1))
+  const allowedSizes = new Set([30, 50, 100])
+  const pageSize = allowedSizes.has(options.pageSize ?? 50)
+    ? (options.pageSize as number)
+    : 50
+
+  const { where, params } = buildContactListWhere(options)
+  const db = getDb()
+  const totalRow = db
+    .prepare(`SELECT COUNT(*) AS c FROM store_google_contacts ${where}`)
+    .get(...params) as { c: number }
+  const total = totalRow.c
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const safePage = Math.min(page, totalPages)
+  const offset = (safePage - 1) * pageSize
+
+  const rows = db
+    .prepare(
+      `${SELECT}
+       ${where}
+       ORDER BY is_active DESC, name ASC, id ASC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(...params, pageSize, offset) as ContactRow[]
+
+  return {
+    data: rows.map(mapContact),
+    pagination: {
+      page: safePage,
+      pageSize,
+      total,
+      totalPages,
+    },
+  }
+}
+
+export function getStoreGoogleContactsByIds(
+  ids: number[],
+): StoreGoogleContact[] {
+  if (ids.length === 0) return []
+  const unique = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))]
+  if (unique.length === 0) return []
+
+  const placeholders = unique.map(() => "?").join(", ")
+  const rows = getDb()
+    .prepare(
+      `${SELECT}
+       WHERE id IN (${placeholders})
+       ORDER BY is_active DESC, name ASC, id ASC`,
+    )
+    .all(...unique) as ContactRow[]
 
   return rows.map(mapContact)
 }
