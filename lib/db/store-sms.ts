@@ -616,3 +616,84 @@ export function listStoreSmsDispatchLogs(campaignId: number) {
     )
     .all(campaignId)
 }
+
+export type StoreSmsRecipientStatusCounts = {
+  success: number
+  failed: number
+  excluded: number
+  pending: number
+  processing: number
+  cancelled: number
+}
+
+export function getStoreSmsRecipientStatusCounts(
+  campaignId: number,
+): StoreSmsRecipientStatusCounts {
+  const row = getDb()
+    .prepare(
+      `SELECT
+         SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success,
+         SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+         SUM(CASE WHEN status = 'excluded' THEN 1 ELSE 0 END) AS excluded,
+         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
+         SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) AS processing,
+         SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled
+       FROM store_sms_campaign_recipients
+       WHERE campaign_id = ?`,
+    )
+    .get(campaignId) as {
+    success: number | null
+    failed: number | null
+    excluded: number | null
+    pending: number | null
+    processing: number | null
+    cancelled: number | null
+  }
+
+  return {
+    success: row?.success ?? 0,
+    failed: row?.failed ?? 0,
+    excluded: row?.excluded ?? 0,
+    pending: row?.pending ?? 0,
+    processing: row?.processing ?? 0,
+    cancelled: row?.cancelled ?? 0,
+  }
+}
+
+export function listRecentStoreSmsFailedDispatchHints(
+  campaignId: number,
+  limit = 10,
+): Array<{ error_code: string | null; error_message: string | null }> {
+  const safeLimit = Math.min(50, Math.max(1, Math.floor(limit)))
+  return getDb()
+    .prepare(
+      `SELECT error_code, error_message
+       FROM store_sms_dispatch_logs
+       WHERE campaign_id = ?
+         AND status = 'failed'
+       ORDER BY id DESC
+       LIMIT ?`,
+    )
+    .all(campaignId, safeLimit) as Array<{
+    error_code: string | null
+    error_message: string | null
+  }>
+}
+
+export function listRecentStoreSmsFailedRecipientHints(
+  campaignId: number,
+  limit = 10,
+): Array<{ error_message: string | null }> {
+  const safeLimit = Math.min(50, Math.max(1, Math.floor(limit)))
+  return getDb()
+    .prepare(
+      `SELECT error_message
+       FROM store_sms_campaign_recipients
+       WHERE campaign_id = ?
+         AND status = 'failed'
+         AND error_message IS NOT NULL
+       ORDER BY id DESC
+       LIMIT ?`,
+    )
+    .all(campaignId, safeLimit) as Array<{ error_message: string | null }>
+}

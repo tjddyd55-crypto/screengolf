@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import styles from "../../../admin.module.css"
 import SmsSubNav from "../SmsSubNav"
+import { mapStoreSmsCampaignStatusLabel } from "@/lib/store-sms/store-sms-campaign-ui"
 
 type Campaign = {
   id: number
@@ -73,7 +74,14 @@ export default function AdminSmsHistoryPage() {
                   <td>{row.success_count}</td>
                   <td>{row.failed_count}</td>
                   <td>{row.excluded_recipients}</td>
-                  <td>{row.status}</td>
+                  <td>
+                    {
+                      mapStoreSmsCampaignStatusLabel(
+                        row.status,
+                        row.send_mode,
+                      ).label
+                    }
+                  </td>
                   <td>
                     <Link href={`/admin/sms/${row.id}`} className={styles.btnLink}>
                       보기

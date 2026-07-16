@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import styles from "../../../admin.module.css"
 import SmsSubNav from "../SmsSubNav"
+import { mapStoreSmsCampaignStatusLabel } from "@/lib/store-sms/store-sms-campaign-ui"
 
 type Campaign = {
   id: number
@@ -86,7 +87,9 @@ export default function AdminSmsScheduledPage() {
                   <td>{row.scheduled_at ?? "-"}</td>
                   <td>{row.total_recipients}</td>
                   <td>{row.sendable_recipients}</td>
-                  <td>{row.status}</td>
+                  <td>
+                    {mapStoreSmsCampaignStatusLabel(row.status, "scheduled").label}
+                  </td>
                   <td>{row.created_at}</td>
                   <td>
                     <div className={styles.rowActions}>
