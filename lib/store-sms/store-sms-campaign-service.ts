@@ -6,6 +6,7 @@ import {
   cancelStoreSmsCampaign,
   claimStoreSmsCampaign,
   completeStoreSmsCampaign,
+  countStoreSmsDraftRecipients,
   createStoreSmsCampaign,
   createStoreSmsDraft,
   getStoreSmsCampaign,
@@ -15,11 +16,16 @@ import {
   listDueStoreSmsCampaignIds,
   listPendingStoreSmsRecipients,
   listStoreSmsCampaigns,
+  listStoreSmsDraftRecipientsPage,
   listStoreSmsRecipients,
+  replaceStoreSmsDraftRecipients,
   updateStoreSmsRecipientResult,
   type StoreSmsCampaign,
   type StoreSmsSendMode,
 } from "@/lib/db/store-sms"
+import {
+  getStoreGoogleContactsByIds,
+} from "@/lib/db/store-google-contacts"
 import { getStoreSmsEnv } from "@/lib/store-sms/store-sms-env"
 import { sendStoreSms } from "@/lib/store-sms/store-sms-gateway"
 import { applyStoreSmsTemplate } from "@/lib/store-sms/store-sms-message"
@@ -41,6 +47,36 @@ function assertScheduleTime(scheduledAtIso: string): Date {
     throw new Error("scheduled_at_too_soon")
   }
   return date
+}
+
+function persistDraftRecipientSnapshot(
+  draftId: number,
+  summary: ReturnType<typeof summarizeStoreSmsTarget>,
+): void {
+  const contactIds = summary.recipients
+    .map((item) => item.googleContactId)
+    .filter((id): id is number => typeof id === "number")
+  const contacts = getStoreGoogleContactsByIds(contactIds)
+  const nicknameById = new Map(
+    contacts.map((contact) => [contact.id, contact.nickname]),
+  )
+
+  replaceStoreSmsDraftRecipients(
+    draftId,
+    summary.recipients.map((recipient) => ({
+      googleContactId: recipient.googleContactId,
+      name: recipient.name,
+      nickname:
+        recipient.googleContactId != null
+          ? nicknameById.get(recipient.googleContactId) ?? null
+          : null,
+      phone: recipient.phone,
+      normalizedPhone: recipient.normalizedPhone,
+      eligibilityStatus:
+        recipient.status === "pending" ? "sendable" : "excluded",
+      exclusionReason: recipient.exclusionReason,
+    })),
+  )
 }
 
 export function createStoreSmsDraftFromTarget(input: {
@@ -67,7 +103,19 @@ export function createStoreSmsDraftFromTarget(input: {
     expiresAtIso: expires,
   })
 
-  return { draftId: id, summary, expiresAt: expires }
+  persistDraftRecipientSnapshot(id, summary)
+
+  return {
+    draftId: id,
+    summary: {
+      total: summary.total,
+      sendable: summary.sendable,
+      excluded: summary.excluded,
+      exclusionCounts: summary.exclusionCounts,
+      recipients: summary.recipients,
+    },
+    expiresAt: expires,
+  }
 }
 
 export function getStoreSmsDraftView(draftId: number) {
@@ -83,13 +131,63 @@ export function getStoreSmsDraftView(draftId: number) {
   const filter = draft.filter_json
     ? (JSON.parse(draft.filter_json) as StoreSmsTargetFilter)
     : undefined
+
+  const snapshot = countStoreSmsDraftRecipients(draftId)
+  if (snapshot.total > 0) {
+    return {
+      draft,
+      summary: {
+        total: snapshot.total,
+        sendable: snapshot.sendable,
+        excluded: snapshot.excluded,
+        exclusionCounts: snapshot.exclusionCounts,
+        recipients: [],
+      },
+      contactIds,
+      filter,
+      hasRecipientSnapshot: true,
+    }
+  }
+
   const summary = summarizeStoreSmsTarget({
     type: draft.target_type,
     contactIds,
     filter,
   })
+  persistDraftRecipientSnapshot(draftId, summary)
 
-  return { draft, summary, contactIds, filter }
+  return {
+    draft,
+    summary,
+    contactIds,
+    filter,
+    hasRecipientSnapshot: true,
+  }
+}
+
+export function listDraftRecipientsForUi(
+  draftId: number,
+  options?: {
+    status?: "all" | "sendable" | "excluded"
+    exclusionReason?: string
+    query?: string
+    page?: number
+    pageSize?: number
+  },
+) {
+  const view = getStoreSmsDraftView(draftId)
+  if (!view) return null
+  const page = listStoreSmsDraftRecipientsPage(draftId, options)
+  const counts = countStoreSmsDraftRecipients(draftId)
+  return {
+    ...page,
+    summary: {
+      total: counts.total,
+      sendable: counts.sendable,
+      excluded: counts.excluded,
+      exclusions: counts.exclusionCounts,
+    },
+  }
 }
 
 export function createStoreSmsCampaignFromRequest(input: {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import styles from "../../../admin.module.css"
+import SmsSubNav from "../SmsSubNav"
 
 type Campaign = {
   id: number
@@ -39,13 +40,7 @@ export default function AdminSmsHistoryPage() {
       <Link href="/admin/sms" className={styles.backLink}>
         ← 문자 발송
       </Link>
-      <div className={styles.subNav}>
-        <Link href="/admin/sms/compose">작성</Link>
-        <Link href="/admin/sms/scheduled">예약</Link>
-        <Link href="/admin/sms/history" className={styles.subNavActive}>
-          이력
-        </Link>
-      </div>
+      <SmsSubNav active="/admin/sms/history" />
       <h2 className={styles.pageTitle}>발송 이력</h2>
       {error ? (
         <div className={`${styles.message} ${styles.messageError}`}>{error}</div>

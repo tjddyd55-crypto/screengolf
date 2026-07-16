@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getStoreSmsDraftView } from "@/lib/store-sms/store-sms-campaign-service"
+import { formatStoreSmsExclusionCounts } from "@/lib/store-sms/store-sms-exclusion-labels"
 
 export const dynamic = "force-dynamic"
 
@@ -32,7 +33,15 @@ export async function GET(
         targetType: view.draft.target_type,
         expiresAt: view.draft.expires_at,
       },
-      summary: view.summary,
+      summary: {
+        total: view.summary.total,
+        sendable: view.summary.sendable,
+        excluded: view.summary.excluded,
+        exclusionCounts: view.summary.exclusionCounts,
+        exclusionLabels: formatStoreSmsExclusionCounts(
+          view.summary.exclusionCounts,
+        ),
+      },
       filter: view.filter ?? null,
       contactIds: view.contactIds ?? null,
     })

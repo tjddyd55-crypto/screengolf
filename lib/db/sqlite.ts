@@ -543,5 +543,68 @@ function migrateStoreSmsIfNeeded(database: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_store_sms_recipients_campaign_status
       ON store_sms_campaign_recipients(campaign_id, status);
+
+    CREATE TABLE IF NOT EXISTS store_sms_contact_carts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cart_key TEXT NOT NULL UNIQUE,
+      name TEXT,
+      status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'converted', 'expired')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS store_sms_contact_cart_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cart_id INTEGER NOT NULL,
+      google_contact_id INTEGER NOT NULL,
+      added_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (cart_id, google_contact_id),
+      FOREIGN KEY (cart_id) REFERENCES store_sms_contact_carts(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS store_sms_contact_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      member_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS store_sms_contact_group_members (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id INTEGER NOT NULL,
+      google_contact_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (group_id, google_contact_id),
+      FOREIGN KEY (group_id) REFERENCES store_sms_contact_groups(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS store_sms_draft_recipients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      draft_id INTEGER NOT NULL,
+      google_contact_id INTEGER,
+      name TEXT NOT NULL,
+      nickname TEXT,
+      phone TEXT NOT NULL,
+      normalized_phone TEXT NOT NULL,
+      eligibility_status TEXT NOT NULL
+        CHECK (eligibility_status IN ('sendable', 'excluded')),
+      exclusion_reason TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (draft_id) REFERENCES store_sms_drafts(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_store_sms_cart_items_cart
+      ON store_sms_contact_cart_items(cart_id);
+
+    CREATE INDEX IF NOT EXISTS idx_store_sms_group_members_group
+      ON store_sms_contact_group_members(group_id);
+
+    CREATE INDEX IF NOT EXISTS idx_store_sms_draft_recipients_draft
+      ON store_sms_draft_recipients(draft_id, eligibility_status);
   `)
 }

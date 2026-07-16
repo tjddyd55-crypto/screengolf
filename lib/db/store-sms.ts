@@ -121,6 +121,180 @@ export function getStoreSmsDraft(id: number): StoreSmsDraft | null {
   return row ?? null
 }
 
+export type StoreSmsDraftRecipient = {
+  id: number
+  draft_id: number
+  google_contact_id: number | null
+  name: string
+  nickname: string | null
+  phone: string
+  normalized_phone: string
+  eligibility_status: "sendable" | "excluded"
+  exclusion_reason: StoreSmsExclusionReason | null
+  created_at: string
+}
+
+export function replaceStoreSmsDraftRecipients(
+  draftId: number,
+  recipients: Array<{
+    googleContactId: number | null
+    name: string
+    nickname: string | null
+    phone: string
+    normalizedPhone: string
+    eligibilityStatus: "sendable" | "excluded"
+    exclusionReason: StoreSmsExclusionReason | null
+  }>,
+): void {
+  const db = getDb()
+  const tx = db.transaction(() => {
+    db.prepare(`DELETE FROM store_sms_draft_recipients WHERE draft_id = ?`).run(
+      draftId,
+    )
+    const insert = db.prepare(
+      `INSERT INTO store_sms_draft_recipients
+        (draft_id, google_contact_id, name, nickname, phone, normalized_phone,
+         eligibility_status, exclusion_reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    for (const recipient of recipients) {
+      insert.run(
+        draftId,
+        recipient.googleContactId,
+        recipient.name,
+        recipient.nickname,
+        recipient.phone,
+        recipient.normalizedPhone,
+        recipient.eligibilityStatus,
+        recipient.exclusionReason,
+      )
+    }
+  })
+  tx()
+}
+
+export function countStoreSmsDraftRecipients(draftId: number): {
+  total: number
+  sendable: number
+  excluded: number
+  exclusionCounts: Partial<Record<StoreSmsExclusionReason, number>>
+} {
+  const db = getDb()
+  const totals = db
+    .prepare(
+      `SELECT
+         COUNT(*) AS total,
+         SUM(CASE WHEN eligibility_status = 'sendable' THEN 1 ELSE 0 END) AS sendable,
+         SUM(CASE WHEN eligibility_status = 'excluded' THEN 1 ELSE 0 END) AS excluded
+       FROM store_sms_draft_recipients
+       WHERE draft_id = ?`,
+    )
+    .get(draftId) as {
+    total: number
+    sendable: number
+    excluded: number
+  }
+
+  const reasonRows = db
+    .prepare(
+      `SELECT exclusion_reason AS reason, COUNT(*) AS c
+       FROM store_sms_draft_recipients
+       WHERE draft_id = ? AND eligibility_status = 'excluded'
+         AND exclusion_reason IS NOT NULL
+       GROUP BY exclusion_reason`,
+    )
+    .all(draftId) as Array<{ reason: StoreSmsExclusionReason; c: number }>
+
+  const exclusionCounts: Partial<Record<StoreSmsExclusionReason, number>> = {}
+  for (const row of reasonRows) {
+    exclusionCounts[row.reason] = row.c
+  }
+
+  return {
+    total: totals.total ?? 0,
+    sendable: totals.sendable ?? 0,
+    excluded: totals.excluded ?? 0,
+    exclusionCounts,
+  }
+}
+
+export function listStoreSmsDraftRecipientsPage(
+  draftId: number,
+  options?: {
+    status?: "all" | "sendable" | "excluded"
+    exclusionReason?: string
+    query?: string
+    page?: number
+    pageSize?: number
+  },
+): {
+  data: StoreSmsDraftRecipient[]
+  pagination: {
+    page: number
+    pageSize: number
+    total: number
+    totalPages: number
+  }
+} {
+  const conditions = ["draft_id = ?"]
+  const params: Array<string | number> = [draftId]
+
+  if (options?.status === "sendable" || options?.status === "excluded") {
+    conditions.push("eligibility_status = ?")
+    params.push(options.status)
+  }
+  if (options?.exclusionReason) {
+    conditions.push("exclusion_reason = ?")
+    params.push(options.exclusionReason)
+  }
+  const query = options?.query?.trim()
+  if (query) {
+    conditions.push("(name LIKE ? OR nickname LIKE ? OR phone LIKE ?)")
+    const pattern = `%${query}%`
+    params.push(pattern, pattern, pattern)
+  }
+
+  const where = `WHERE ${conditions.join(" AND ")}`
+  const page = Math.max(1, Math.floor(options?.page ?? 1))
+  const allowed = new Set([30, 50, 100])
+  const pageSize = allowed.has(options?.pageSize ?? 50)
+    ? (options?.pageSize as number)
+    : 50
+
+  const totalRow = getDb()
+    .prepare(
+      `SELECT COUNT(*) AS c FROM store_sms_draft_recipients ${where}`,
+    )
+    .get(...params) as { c: number }
+  const total = totalRow.c
+  const totalPages = Math.max(1, Math.ceil(total / pageSize) || 1)
+  const safePage = Math.min(page, totalPages)
+  const offset = (safePage - 1) * pageSize
+
+  const data = getDb()
+    .prepare(
+      `SELECT id, draft_id, google_contact_id, name, nickname, phone,
+              normalized_phone, eligibility_status, exclusion_reason, created_at
+       FROM store_sms_draft_recipients
+       ${where}
+       ORDER BY
+         CASE eligibility_status WHEN 'excluded' THEN 1 ELSE 0 END,
+         name ASC, id ASC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(...params, pageSize, offset) as StoreSmsDraftRecipient[]
+
+  return {
+    data,
+    pagination: {
+      page: safePage,
+      pageSize,
+      total,
+      totalPages,
+    },
+  }
+}
+
 export function createStoreSmsCampaign(input: {
   title: string
   message: string

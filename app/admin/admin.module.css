@@ -410,6 +410,80 @@
   color: #38bdf8;
 }
 
+.cartBar {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+  padding: 14px 16px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 12px;
+  background: #0b1220;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.cartBarTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.cartBarActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.exclusionCards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.exclusionCard {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  font-size: 13px;
+}
+
+.variableRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.radioGroupWide {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.modalWide {
+  max-width: 960px;
+}
+
+.messagePreview {
+  white-space: pre-wrap;
+  background: #0f172a;
+  padding: 12px;
+  border-radius: 8px;
+  margin-top: 12px;
+}
+
 .loginWrap {
   min-height: 100vh;
   display: flex;

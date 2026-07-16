@@ -15,8 +15,18 @@ export default function AdminSmsHomePage() {
         <Link href="/admin/sms/compose" className={styles.card}>
           <h3 className={styles.cardTitle}>문자 작성</h3>
           <p className={styles.cardDesc}>
-            draft 또는 직접 대상으로 즉시/예약 문자를 작성합니다.
+            대상함·그룹 초안으로 즉시/예약 문자를 작성합니다.
           </p>
+        </Link>
+        <Link href="/admin/sms/cart" className={styles.card}>
+          <h3 className={styles.cardTitle}>문자 대상함</h3>
+          <p className={styles.cardDesc}>
+            여러 페이지에서 담은 연락처를 확인하고 정리합니다.
+          </p>
+        </Link>
+        <Link href="/admin/sms/groups" className={styles.card}>
+          <h3 className={styles.cardTitle}>문자 그룹</h3>
+          <p className={styles.cardDesc}>자주 쓰는 대상 조합을 저장하고 불러옵니다.</p>
         </Link>
         <Link href="/admin/sms/scheduled" className={styles.card}>
           <h3 className={styles.cardTitle}>예약 목록</h3>
@@ -28,7 +38,7 @@ export default function AdminSmsHomePage() {
         </Link>
         <Link href="/admin/google-contacts" className={styles.card}>
           <h3 className={styles.cardTitle}>고객 연락처</h3>
-          <p className={styles.cardDesc}>대상을 선택하거나 검색 결과 전체로 작성합니다.</p>
+          <p className={styles.cardDesc}>대상을 선택해 대상함에 담습니다.</p>
         </Link>
       </div>
     </>

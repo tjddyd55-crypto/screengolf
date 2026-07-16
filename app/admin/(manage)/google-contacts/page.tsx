@@ -98,8 +98,10 @@ function GoogleContactsPageInner() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const [cartTotal, setCartTotal] = useState(0)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
+  const [confirmFilteredOpen, setConfirmFilteredOpen] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncSummary, setSyncSummary] = useState<SyncSummary | null>(null)
   const [editing, setEditing] = useState<Contact | null>(null)
@@ -129,6 +131,16 @@ function GoogleContactsPageInner() {
     }
   }, [])
 
+  const loadCartTotal = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/store-sms/cart")
+      const json = await res.json()
+      if (json.success) setCartTotal(json.total ?? 0)
+    } catch {
+      // ignore
+    }
+  }, [])
+
   const loadContacts = useCallback(async () => {
     const params = new URLSearchParams()
     if (appliedSearch.trim()) params.set("query", appliedSearch.trim())
@@ -149,7 +161,8 @@ function GoogleContactsPageInner() {
 
   useEffect(() => {
     loadGoogleStatus()
-  }, [loadGoogleStatus])
+    loadCartTotal()
+  }, [loadGoogleStatus, loadCartTotal])
 
   useEffect(() => {
     loadContacts()
@@ -188,36 +201,71 @@ function GoogleContactsPageInner() {
     )
   }
 
-  async function createDraftAndCompose(input: {
-    type: "selected" | "filtered_all"
-    contactIds?: number[]
-  }) {
+  async function addSelectedToCart() {
     setError("")
-    const res = await fetch("/api/admin/store-sms/drafts", {
+    if (selectedIds.length === 0) return
+    const res = await fetch("/api/admin/store-sms/cart/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(
-        input.type === "selected"
-          ? { type: "selected", contactIds: input.contactIds }
-          : {
-              type: "filtered_all",
-              filter: {
-                query: appliedSearch.trim() || undefined,
-                status: filter,
-              },
-            },
-      ),
+      body: JSON.stringify({ contactIds: selectedIds }),
     })
-    const json = (await res.json()) as {
-      success?: boolean
-      draftId?: number
-      error?: string
+    const json = await res.json()
+    if (!res.ok || !json.success) {
+      setError(json.error ?? "대상함 담기에 실패했습니다.")
+      return
     }
+    setCartTotal(json.total ?? 0)
+    setMessage(
+      `대상함에 ${json.added}명 추가 · 기존 포함 ${json.alreadyExists}명 · 총 ${json.total}명`,
+    )
+    setSelectedIds([])
+  }
+
+  async function addFilteredToCart() {
+    setError("")
+    const res = await fetch("/api/admin/store-sms/cart/add-filtered", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: appliedSearch.trim() || undefined,
+        status: filter,
+      }),
+    })
+    const json = await res.json()
+    if (!res.ok || !json.success) {
+      setError(json.error ?? "검색 결과 담기에 실패했습니다.")
+      return
+    }
+    setCartTotal(json.total ?? 0)
+    setConfirmFilteredOpen(false)
+    setMessage(
+      `검색 결과 ${json.matched?.toLocaleString() ?? "-"}명 중 신규 ${json.added}명 담김 · 총 ${json.total}명`,
+    )
+  }
+
+  async function composeFromCart() {
+    setError("")
+    const res = await fetch("/api/admin/store-sms/cart/to-draft", {
+      method: "POST",
+    })
+    const json = await res.json()
     if (!res.ok || !json.success || !json.draftId) {
-      setError(json.error ?? "문자 작성 화면으로 이동하지 못했습니다.")
+      setError(json.error ?? "문자 작성으로 이동하지 못했습니다.")
       return
     }
     router.push(`/admin/sms/compose?draftId=${json.draftId}`)
+  }
+
+  async function clearCart() {
+    if (!window.confirm("문자 대상함을 비울까요?")) return
+    const res = await fetch("/api/admin/store-sms/cart", { method: "DELETE" })
+    const json = await res.json()
+    if (!json.success) {
+      setError(json.error ?? "대상함 비우기에 실패했습니다.")
+      return
+    }
+    setCartTotal(0)
+    setMessage("대상함을 비웠습니다.")
   }
 
   async function handleSync() {
@@ -459,21 +507,22 @@ function GoogleContactsPageInner() {
             type="button"
             className={`${styles.btn} ${styles.btnPrimary}`}
             disabled={selectedIds.length === 0}
-            onClick={() =>
-              createDraftAndCompose({
-                type: "selected",
-                contactIds: selectedIds,
-              })
-            }
+            onClick={addSelectedToCart}
           >
-            선택 문자 작성 ({selectedIds.length})
+            선택한 {selectedIds.length}명 대상함에 담기
           </button>
           <button
             type="button"
             className={`${styles.btn} ${styles.btnSecondary}`}
-            onClick={() => createDraftAndCompose({ type: "filtered_all" })}
+            onClick={() => {
+              if (pagination.total >= 3000) {
+                setConfirmFilteredOpen(true)
+                return
+              }
+              addFilteredToCart()
+            }}
           >
-            검색 결과 전체 문자 작성
+            검색 결과 {pagination.total.toLocaleString()}명 대상함에 담기
           </button>
         </div>
       </div>
@@ -492,12 +541,12 @@ function GoogleContactsPageInner() {
           </colgroup>
           <thead>
             <tr>
-              <th>
+              <th title={`현재 페이지 ${contacts.length}명 선택`}>
                 <input
                   type="checkbox"
                   checked={allPageSelected}
                   onChange={toggleSelectAllPage}
-                  aria-label="현재 페이지 전체 선택"
+                  aria-label={`현재 페이지 ${contacts.length}명 선택`}
                 />
               </th>
               <th>이름</th>
@@ -614,6 +663,64 @@ function GoogleContactsPageInner() {
           </button>
         </div>
       </div>
+
+      <div className={styles.cartBar}>
+        <p className={styles.cartBarTitle}>
+          문자 대상함 {cartTotal.toLocaleString()}명
+        </p>
+        <div className={styles.cartBarActions}>
+          <Link
+            href="/admin/sms/cart"
+            className={`${styles.btn} ${styles.btnSecondary}`}
+          >
+            대상함 보기
+          </Link>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            disabled={cartTotal === 0}
+            onClick={composeFromCart}
+          >
+            문자 작성
+          </button>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnDanger}`}
+            disabled={cartTotal === 0}
+            onClick={clearCart}
+          >
+            비우기
+          </button>
+        </div>
+      </div>
+
+      {confirmFilteredOpen ? (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modal}>
+            <h3 className={styles.modalTitle}>검색 결과 전체 담기</h3>
+            <p className={styles.googleMeta}>
+              현재 검색/필터 결과 {pagination.total.toLocaleString()}명을 대상함에
+              담습니다. 기존 대상함과 병합되며 중복은 한 번만 담깁니다.
+            </p>
+            <div className={styles.buttonRow} style={{ marginTop: 16 }}>
+              <button
+                type="button"
+                className={`${styles.btn} ${styles.btnPrimary}`}
+                onClick={addFilteredToCart}
+              >
+                담기
+              </button>
+              <button
+                type="button"
+                className={`${styles.btn} ${styles.btnSecondary}`}
+                onClick={() => setConfirmFilteredOpen(false)}
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {editing ? (
         <div className={styles.modalOverlay}>
