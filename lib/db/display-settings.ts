@@ -8,10 +8,17 @@ import {
   type DisplayAsset,
 } from "./display-assets"
 import { getDisplaySceneById } from "./display-scenes"
+import {
+  DEFAULT_DISPLAY_UNIT_CODE,
+  getDisplayUnitByCode,
+  getDisplayUnitById,
+  resolveUnitId,
+} from "./display-units"
 import type { DisplaySettingsView } from "@/lib/display/types"
 
 export type DisplaySettings = {
   id: number
+  display_unit_id: number
   mode: DisplayMode
   current_scene_id: number | null
   active_notice_id: number | null
@@ -32,25 +39,58 @@ function loadAsset(id: number | null): DisplayAsset | null {
   return getDisplayAssetById(id)
 }
 
-export function getDisplaySettings(): DisplaySettings {
+function selectSettingsByUnitId(unitId: number): DisplaySettings {
   const row = getDb()
     .prepare(
-      `SELECT id, mode, current_scene_id, active_notice_id, media_full_file_id, media_left_file_id, media_right_file_id, updated_at
-       FROM display_settings WHERE id = 1`,
+      `SELECT id, display_unit_id, mode, current_scene_id, active_notice_id,
+              media_full_file_id, media_left_file_id, media_right_file_id, updated_at
+       FROM display_settings WHERE display_unit_id = ?`,
     )
-    .get() as DisplaySettingsRow
+    .get(unitId) as DisplaySettingsRow | undefined
+
+  if (!row) {
+    throw new Error("전광판 설정을 찾을 수 없습니다.")
+  }
 
   return row
 }
 
-export function getDisplaySettingsView(): DisplaySettingsView {
-  const settings = getDisplaySettings()
+/** Unit1(alias). unitId 생략 시 display-1 */
+export function getDisplaySettings(unitId?: number): DisplaySettings {
+  const resolvedUnitId =
+    unitId ?? resolveUnitId(DEFAULT_DISPLAY_UNIT_CODE)
+  return selectSettingsByUnitId(resolvedUnitId)
+}
+
+export function getDisplaySettingsByUnitCode(unitCode: string): DisplaySettings {
+  const unit = getDisplayUnitByCode(unitCode)
+  if (!unit) {
+    throw new Error("전광판을 찾을 수 없습니다.")
+  }
+  return selectSettingsByUnitId(unit.id)
+}
+
+export function getDisplaySettingsView(
+  unitIdOrCode?: number | string,
+): DisplaySettingsView {
+  const unitId =
+    typeof unitIdOrCode === "string"
+      ? resolveUnitId(unitIdOrCode)
+      : unitIdOrCode !== undefined
+        ? unitIdOrCode
+        : resolveUnitId(DEFAULT_DISPLAY_UNIT_CODE)
+
+  const settings = getDisplaySettings(unitId)
   const currentScene = settings.current_scene_id
     ? getDisplaySceneById(settings.current_scene_id)
     : null
 
+  const unit = getDisplayUnitById(settings.display_unit_id)
+
   return {
     ...settings,
+    unit_code: unit?.code ?? null,
+    unit_name: unit?.name ?? null,
     current_scene: currentScene
       ? { id: currentScene.id, name: currentScene.name }
       : null,
@@ -60,15 +100,20 @@ export function getDisplaySettingsView(): DisplaySettingsView {
   }
 }
 
-export function updateDisplaySettings(input: {
-  mode?: DisplayMode
-  current_scene_id?: number | null
-  active_notice_id?: number | null
-  media_full_file_id?: number | null
-  media_left_file_id?: number | null
-  media_right_file_id?: number | null
-}): DisplaySettings {
-  const current = getDisplaySettings()
+export function updateDisplaySettings(
+  input: {
+    mode?: DisplayMode
+    current_scene_id?: number | null
+    active_notice_id?: number | null
+    media_full_file_id?: number | null
+    media_left_file_id?: number | null
+    media_right_file_id?: number | null
+  },
+  unitId?: number,
+): DisplaySettings {
+  const resolvedUnitId =
+    unitId ?? resolveUnitId(DEFAULT_DISPLAY_UNIT_CODE)
+  const current = getDisplaySettings(resolvedUnitId)
 
   if (input.mode && !isDisplayMode(input.mode)) {
     throw new Error("유효하지 않은 display mode입니다.")
@@ -119,8 +164,10 @@ export function updateDisplaySettings(input: {
   getDb()
     .prepare(
       `UPDATE display_settings
-       SET mode = ?, current_scene_id = ?, active_notice_id = ?, media_full_file_id = ?, media_left_file_id = ?, media_right_file_id = ?, updated_at = datetime('now')
-       WHERE id = 1`,
+       SET mode = ?, current_scene_id = ?, active_notice_id = ?,
+           media_full_file_id = ?, media_left_file_id = ?, media_right_file_id = ?,
+           updated_at = datetime('now')
+       WHERE display_unit_id = ?`,
     )
     .run(
       mode,
@@ -129,7 +176,8 @@ export function updateDisplaySettings(input: {
       mediaFullFileId,
       mediaLeftFileId,
       mediaRightFileId,
+      resolvedUnitId,
     )
 
-  return getDisplaySettings()
+  return getDisplaySettings(resolvedUnitId)
 }

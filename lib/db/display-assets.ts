@@ -209,9 +209,11 @@ export function deleteDisplayAsset(id: number): DisplayAsset | null {
            media_left_file_id = CASE WHEN media_left_file_id = ? THEN NULL ELSE media_left_file_id END,
            media_right_file_id = CASE WHEN media_right_file_id = ? THEN NULL ELSE media_right_file_id END,
            updated_at = datetime('now')
-       WHERE id = 1`,
+       WHERE media_full_file_id = ?
+          OR media_left_file_id = ?
+          OR media_right_file_id = ?`,
     )
-    .run(id, id, id)
+    .run(id, id, id, id, id, id)
 
   return asset
 }

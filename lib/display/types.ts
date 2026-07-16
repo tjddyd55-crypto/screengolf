@@ -41,6 +41,9 @@ export type DisplayStatePayload =
 
 export type DisplaySettingsView = {
   id: number
+  display_unit_id: number
+  unit_code: string | null
+  unit_name: string | null
   mode: DisplayMode
   current_scene_id: number | null
   active_notice_id: number | null
@@ -56,6 +59,7 @@ export type DisplaySettingsView = {
 
 export type DisplaySceneView = {
   id: number
+  display_unit_id: number
   name: string
   mode: DisplayMode
   notice_id: number | null

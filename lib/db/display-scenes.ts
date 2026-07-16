@@ -7,10 +7,15 @@ import {
 import { getDisplayAssetById } from "./display-assets"
 import { getNoticeById } from "./display-notices"
 import { getDisplaySettings } from "./display-settings"
+import {
+  DEFAULT_DISPLAY_UNIT_CODE,
+  resolveUnitId,
+} from "./display-units"
 import type { DisplaySceneView } from "@/lib/display/types"
 
 export type DisplayScene = {
   id: number
+  display_unit_id: number
   name: string
   mode: DisplayMode
   notice_id: number | null
@@ -25,6 +30,7 @@ export type DisplayScene = {
 
 type SceneRow = {
   id: number
+  display_unit_id: number
   name: string
   mode: DisplayMode
   notice_id: number | null
@@ -119,26 +125,30 @@ export function validateSceneConfig(input: {
   }
 }
 
+const SCENE_SELECT = `SELECT id, display_unit_id, name, mode, notice_id, media_full_file_id,
+       media_left_file_id, media_right_file_id, sort_order, is_active, created_at, updated_at
+       FROM display_scenes`
+
 export function getDisplaySceneById(id: number): DisplayScene | null {
   const row = getDb()
-    .prepare(
-      `SELECT id, name, mode, notice_id, media_full_file_id, media_left_file_id, media_right_file_id, sort_order, is_active, created_at, updated_at
-       FROM display_scenes WHERE id = ?`,
-    )
+    .prepare(`${SCENE_SELECT} WHERE id = ?`)
     .get(id) as SceneRow | undefined
 
   return row ? mapScene(row) : null
 }
 
-export function listDisplayScenes(): DisplaySceneView[] {
-  const settings = getDisplaySettings()
+/** unitId 생략 시 Unit1(display-1) Scene만 조회 (기존 API 호환) */
+export function listDisplayScenes(unitId?: number): DisplaySceneView[] {
+  const resolvedUnitId =
+    unitId ?? resolveUnitId(DEFAULT_DISPLAY_UNIT_CODE)
+  const settings = getDisplaySettings(resolvedUnitId)
   const rows = getDb()
     .prepare(
-      `SELECT id, name, mode, notice_id, media_full_file_id, media_left_file_id, media_right_file_id, sort_order, is_active, created_at, updated_at
-       FROM display_scenes
+      `${SCENE_SELECT}
+       WHERE display_unit_id = ?
        ORDER BY sort_order ASC, id ASC`,
     )
-    .all() as SceneRow[]
+    .all(resolvedUnitId) as SceneRow[]
 
   return rows.map((row) => {
     const scene = mapScene(row)
@@ -165,6 +175,7 @@ export function listDisplayScenes(): DisplaySceneView[] {
 export function createDisplayScene(input: {
   name: string
   mode: DisplayMode
+  display_unit_id?: number
   notice_id?: number | null
   media_full_file_id?: number | null
   media_left_file_id?: number | null
@@ -174,17 +185,25 @@ export function createDisplayScene(input: {
 }): DisplayScene {
   validateSceneConfig(input)
 
+  const unitId =
+    input.display_unit_id ?? resolveUnitId(DEFAULT_DISPLAY_UNIT_CODE)
+
   const maxSort = getDb()
-    .prepare("SELECT COALESCE(MAX(sort_order), 0) AS max_order FROM display_scenes")
-    .get() as { max_order: number }
+    .prepare(
+      `SELECT COALESCE(MAX(sort_order), 0) AS max_order
+       FROM display_scenes WHERE display_unit_id = ?`,
+    )
+    .get(unitId) as { max_order: number }
 
   const result = getDb()
     .prepare(
       `INSERT INTO display_scenes (
-        name, mode, notice_id, media_full_file_id, media_left_file_id, media_right_file_id, sort_order, is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        display_unit_id, name, mode, notice_id, media_full_file_id,
+        media_left_file_id, media_right_file_id, sort_order, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
+      unitId,
       input.name,
       input.mode,
       input.notice_id ?? null,
@@ -239,7 +258,9 @@ export function updateDisplayScene(
   getDb()
     .prepare(
       `UPDATE display_scenes
-       SET name = ?, mode = ?, notice_id = ?, media_full_file_id = ?, media_left_file_id = ?, media_right_file_id = ?, sort_order = ?, is_active = ?, updated_at = datetime('now')
+       SET name = ?, mode = ?, notice_id = ?, media_full_file_id = ?,
+           media_left_file_id = ?, media_right_file_id = ?, sort_order = ?,
+           is_active = ?, updated_at = datetime('now')
        WHERE id = ?`,
     )
     .run(
@@ -258,7 +279,10 @@ export function updateDisplayScene(
 }
 
 export function deactivateDisplayScene(id: number): boolean {
-  const settings = getDisplaySettings()
+  const scene = getDisplaySceneById(id)
+  if (!scene) return false
+
+  const settings = getDisplaySettings(scene.display_unit_id)
   if (settings.current_scene_id === id) {
     throw new Error("현재 적용 중인 화면은 삭제할 수 없습니다.")
   }
@@ -277,6 +301,7 @@ export function duplicateDisplayScene(id: number): DisplayScene | null {
   if (!scene) return null
 
   return createDisplayScene({
+    display_unit_id: scene.display_unit_id,
     name: `${scene.name} 복사본`,
     mode: scene.mode,
     notice_id: scene.notice_id,
@@ -298,8 +323,10 @@ export function applyDisplayScene(id: number): DisplayScene {
   getDb()
     .prepare(
       `UPDATE display_settings
-       SET current_scene_id = ?, mode = ?, active_notice_id = ?, media_full_file_id = ?, media_left_file_id = ?, media_right_file_id = ?, updated_at = datetime('now')
-       WHERE id = 1`,
+       SET current_scene_id = ?, mode = ?, active_notice_id = ?,
+           media_full_file_id = ?, media_left_file_id = ?, media_right_file_id = ?,
+           updated_at = datetime('now')
+       WHERE display_unit_id = ?`,
     )
     .run(
       scene.id,
@@ -308,21 +335,24 @@ export function applyDisplayScene(id: number): DisplayScene {
       scene.media_full_file_id,
       scene.media_left_file_id,
       scene.media_right_file_id,
+      scene.display_unit_id,
     )
 
   return scene
 }
 
-export function getRankingScene(): DisplayScene | null {
+export function getRankingScene(unitId?: number): DisplayScene | null {
+  const resolvedUnitId =
+    unitId ?? resolveUnitId(DEFAULT_DISPLAY_UNIT_CODE)
+
   const row = getDb()
     .prepare(
-      `SELECT id, name, mode, notice_id, media_full_file_id, media_left_file_id, media_right_file_id, sort_order, is_active, created_at, updated_at
-       FROM display_scenes
-       WHERE mode = 'ranking' AND is_active = 1
+      `${SCENE_SELECT}
+       WHERE display_unit_id = ? AND mode = 'ranking' AND is_active = 1
        ORDER BY sort_order ASC, id ASC
        LIMIT 1`,
     )
-    .get() as SceneRow | undefined
+    .get(resolvedUnitId) as SceneRow | undefined
 
   return row ? mapScene(row) : null
 }

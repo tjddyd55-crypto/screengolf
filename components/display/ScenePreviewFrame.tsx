@@ -1,6 +1,7 @@
 "use client"
 
 import DisplayMediaRenderer from "@/components/display/DisplayMediaRenderer"
+import styles from "./preview-frame.module.css"
 
 export type PreviewAsset = {
   id: number
@@ -24,6 +25,7 @@ type ScenePreviewFrameProps = {
   rightAsset?: PreviewAsset | null
   noticeTitle?: string | null
   adminMode?: boolean
+  large?: boolean
 }
 
 function resolveUrl(asset: PreviewAsset): string {
@@ -50,59 +52,35 @@ export default function ScenePreviewFrame({
   rightAsset,
   noticeTitle,
   adminMode = true,
+  large = false,
 }: ScenePreviewFrameProps) {
   return (
-    <div
-      style={{
-        width: "100%",
-        aspectRatio: "16 / 9",
-        background: "#020617",
-        borderRadius: 8,
-        overflow: "hidden",
-        border: "1px solid rgba(255,255,255,0.12)",
-        position: "relative",
-      }}
-    >
+    <div className={`${styles.frame} ${large ? styles.frameLarge : ""}`}>
       {mode === "ranking" ? (
-        <div
-          style={{
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "#e2e8f0",
-            fontSize: 20,
-          }}
-        >
-          랭킹 화면
+        <div className={styles.placeholder}>
+          <span>🏆</span>
+          <span>월간 랭킹 화면</span>
         </div>
       ) : null}
 
       {mode === "notice" ? (
-        <div
-          style={{
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "#e2e8f0",
-            fontSize: 18,
-            padding: 24,
-            textAlign: "center",
-          }}
-        >
-          공지사항 화면
+        <div className={styles.placeholder}>
+          <span>공지사항 화면</span>
           {noticeTitle ? (
-            <div style={{ marginTop: 8, color: "#94a3b8" }}>{noticeTitle}</div>
+            <span className={styles.placeholderSub}>{noticeTitle}</span>
           ) : null}
         </div>
       ) : null}
 
       {mode === "media_full" ? (
-        isMissing(fullAsset) || !fullAsset ? (
-          <MissingBox label="원본 파일이 없어 다시 업로드가 필요합니다." />
+        !fullAsset ? (
+          <div className={styles.placeholder}>
+            <span className={styles.placeholderSub}>파일 미리보기</span>
+          </div>
+        ) : isMissing(fullAsset) ? (
+          <div className={styles.missing}>
+            원본 파일이 없어 다시 업로드가 필요합니다.
+          </div>
         ) : (
           <DisplayMediaRenderer
             fileUrl={resolveUrl(fullAsset)}
@@ -116,10 +94,14 @@ export default function ScenePreviewFrame({
       ) : null}
 
       {mode === "media_split" ? (
-        <div style={{ width: "100%", height: "100%", display: "flex" }}>
-          <div style={{ width: "50%", height: "100%", borderRight: "1px solid rgba(255,255,255,0.15)" }}>
-            {isMissing(leftAsset) || !leftAsset ? (
-              <MissingBox label="왼쪽 파일 누락" />
+        <div className={styles.split}>
+          <div className={`${styles.splitPane} ${styles.splitPaneLeft}`}>
+            {!leftAsset ? (
+              <div className={styles.placeholder}>
+                <span className={styles.placeholderSub}>왼쪽</span>
+              </div>
+            ) : isMissing(leftAsset) ? (
+              <div className={styles.missing}>왼쪽 파일 누락</div>
             ) : (
               <DisplayMediaRenderer
                 fileUrl={resolveUrl(leftAsset)}
@@ -131,9 +113,13 @@ export default function ScenePreviewFrame({
               />
             )}
           </div>
-          <div style={{ width: "50%", height: "100%" }}>
-            {isMissing(rightAsset) || !rightAsset ? (
-              <MissingBox label="오른쪽 파일 누락" />
+          <div className={styles.splitPane}>
+            {!rightAsset ? (
+              <div className={styles.placeholder}>
+                <span className={styles.placeholderSub}>오른쪽</span>
+              </div>
+            ) : isMissing(rightAsset) ? (
+              <div className={styles.missing}>오른쪽 파일 누락</div>
             ) : (
               <DisplayMediaRenderer
                 fileUrl={resolveUrl(rightAsset)}
@@ -147,26 +133,6 @@ export default function ScenePreviewFrame({
           </div>
         </div>
       ) : null}
-    </div>
-  )
-}
-
-function MissingBox({ label }: { label: string }) {
-  return (
-    <div
-      style={{
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: "#f87171",
-        fontSize: 14,
-        textAlign: "center",
-        padding: 12,
-      }}
-    >
-      {label}
     </div>
   )
 }

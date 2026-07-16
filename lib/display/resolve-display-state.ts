@@ -3,6 +3,10 @@ import { getDisplayAssetById, toPublicMedia } from "@/lib/db/display-assets"
 import { getNoticeById } from "@/lib/db/display-notices"
 import { getDisplaySettings } from "@/lib/db/display-settings"
 import { getDisplaySceneById } from "@/lib/db/display-scenes"
+import {
+  DEFAULT_DISPLAY_UNIT_CODE,
+  getDisplayUnitByCode,
+} from "@/lib/db/display-units"
 import type { DisplaySceneRef, DisplayStatePayload } from "@/lib/display/types"
 
 export type DisplaySource = {
@@ -75,12 +79,28 @@ function resolveFromSource(source: DisplaySource): DisplayStatePayload | null {
   return null
 }
 
-export function resolveDisplayState(): DisplayStatePayload {
-  const settings = getDisplaySettings()
+/** unitCode 생략 시 display-1 (기존 /api/display-state 호환) */
+export function resolveDisplayState(unitCode?: string): DisplayStatePayload {
+  const explicitCode = unitCode?.trim()
+  const code = explicitCode || DEFAULT_DISPLAY_UNIT_CODE
+  const unit = getDisplayUnitByCode(code)
+
+  if (!unit) {
+    if (explicitCode) {
+      throw new Error("UNIT_NOT_FOUND")
+    }
+    return buildRankingState()
+  }
+
+  if (!unit.is_active) {
+    return buildRankingState()
+  }
+
+  const settings = getDisplaySettings(unit.id)
 
   if (settings.current_scene_id) {
     const scene = getDisplaySceneById(settings.current_scene_id)
-    if (scene && scene.is_active) {
+    if (scene && scene.is_active && scene.display_unit_id === unit.id) {
       const resolved = resolveFromSource({
         mode: scene.mode,
         notice_id: scene.notice_id,

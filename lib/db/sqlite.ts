@@ -24,6 +24,14 @@ export function getDb(): Database.Database {
   return db
 }
 
+/** 테스트 전용: 열린 DB 연결을 닫아 임시 경로 교체를 가능하게 한다. */
+export function closeDbForTests(): void {
+  if (db) {
+    db.close()
+    db = null
+  }
+}
+
 function seedPlanTypes(database: Database.Database): void {
   const insert = database.prepare(`
     INSERT INTO store_plan_types (code, name, sort_order, is_active)
@@ -252,6 +260,208 @@ function migrateDisplayScenesIfNeeded(database: Database.Database): void {
     .run(currentSceneId)
 }
 
+const DEFAULT_DISPLAY_UNITS = [
+  { code: "display-1", name: "전광판 1", sort_order: 1 },
+  { code: "display-2", name: "전광판 2", sort_order: 2 },
+] as const
+
+const DEFAULT_UNIT_SCENES = [
+  { name: "랭킹 화면", mode: "ranking", sort_order: 1 },
+  { name: "공지사항 화면", mode: "notice", sort_order: 2 },
+  { name: "가로 전체 화면", mode: "media_full", sort_order: 3 },
+  { name: "세로 2분할 화면", mode: "media_split", sort_order: 4 },
+] as const
+
+function seedDefaultScenesForUnit(
+  database: Database.Database,
+  unitId: number,
+): number {
+  const insertScene = database.prepare(`
+    INSERT INTO display_scenes (
+      display_unit_id, name, mode, notice_id, media_full_file_id,
+      media_left_file_id, media_right_file_id, sort_order, is_active
+    ) VALUES (?, ?, ?, NULL, NULL, NULL, NULL, ?, 1)
+  `)
+
+  let rankingSceneId = 0
+  for (const scene of DEFAULT_UNIT_SCENES) {
+    const result = insertScene.run(
+      unitId,
+      scene.name,
+      scene.mode,
+      scene.sort_order,
+    )
+    if (scene.mode === "ranking") {
+      rankingSceneId = Number(result.lastInsertRowid)
+    }
+  }
+  return rankingSceneId
+}
+
+function ensureUnitSettingsAndScenes(
+  database: Database.Database,
+  unitId: number,
+  seedScenesIfEmpty: boolean,
+): void {
+  const settings = database
+    .prepare("SELECT id FROM display_settings WHERE display_unit_id = ?")
+    .get(unitId) as { id: number } | undefined
+
+  const sceneCount = database
+    .prepare(
+      "SELECT COUNT(*) AS count FROM display_scenes WHERE display_unit_id = ?",
+    )
+    .get(unitId) as { count: number }
+
+  let rankingSceneId: number | null = null
+  if (seedScenesIfEmpty && sceneCount.count === 0) {
+    rankingSceneId = seedDefaultScenesForUnit(database, unitId)
+  } else {
+    const ranking = database
+      .prepare(
+        `SELECT id FROM display_scenes
+         WHERE display_unit_id = ? AND mode = 'ranking' AND is_active = 1
+         ORDER BY sort_order ASC, id ASC LIMIT 1`,
+      )
+      .get(unitId) as { id: number } | undefined
+    rankingSceneId = ranking?.id ?? null
+  }
+
+  if (!settings) {
+    database
+      .prepare(
+        `INSERT INTO display_settings (
+          display_unit_id, mode, current_scene_id, active_notice_id
+        ) VALUES (?, 'ranking', ?, NULL)`,
+      )
+      .run(unitId, rankingSceneId)
+    return
+  }
+
+  if (rankingSceneId) {
+    const current = database
+      .prepare(
+        "SELECT current_scene_id FROM display_settings WHERE display_unit_id = ?",
+      )
+      .get(unitId) as { current_scene_id: number | null }
+
+    if (!current.current_scene_id) {
+      database
+        .prepare(
+          `UPDATE display_settings
+           SET current_scene_id = ?, updated_at = datetime('now')
+           WHERE display_unit_id = ?`,
+        )
+        .run(rankingSceneId, unitId)
+    }
+  }
+}
+
+function migrateDisplayUnitsIfNeeded(database: Database.Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS display_units (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      code TEXT NOT NULL UNIQUE,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `)
+
+  const insertUnit = database.prepare(`
+    INSERT INTO display_units (name, code, sort_order, is_active)
+    SELECT ?, ?, ?, 1
+    WHERE NOT EXISTS (SELECT 1 FROM display_units WHERE code = ?)
+  `)
+
+  for (const unit of DEFAULT_DISPLAY_UNITS) {
+    insertUnit.run(unit.name, unit.code, unit.sort_order, unit.code)
+  }
+
+  const unit1 = database
+    .prepare("SELECT id FROM display_units WHERE code = 'display-1'")
+    .get() as { id: number }
+  const unit2 = database
+    .prepare("SELECT id FROM display_units WHERE code = 'display-2'")
+    .get() as { id: number }
+
+  const sceneColumns = database
+    .prepare("PRAGMA table_info(display_scenes)")
+    .all() as { name: string }[]
+  const hasSceneUnitId = sceneColumns.some(
+    (column) => column.name === "display_unit_id",
+  )
+
+  if (!hasSceneUnitId) {
+    database.exec(`
+      ALTER TABLE display_scenes ADD COLUMN display_unit_id INTEGER
+        REFERENCES display_units(id);
+    `)
+  }
+
+  database
+    .prepare(
+      "UPDATE display_scenes SET display_unit_id = ? WHERE display_unit_id IS NULL",
+    )
+    .run(unit1.id)
+
+  const settingsColumns = database
+    .prepare("PRAGMA table_info(display_settings)")
+    .all() as { name: string }[]
+  const hasSettingsUnitId = settingsColumns.some(
+    (column) => column.name === "display_unit_id",
+  )
+
+  if (!hasSettingsUnitId) {
+    database.exec(`
+      CREATE TABLE display_settings_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        display_unit_id INTEGER NOT NULL UNIQUE,
+        mode TEXT NOT NULL DEFAULT 'ranking'
+          CHECK (mode IN ('ranking', 'notice', 'media_full', 'media_split')),
+        current_scene_id INTEGER,
+        active_notice_id INTEGER,
+        media_full_file_id INTEGER,
+        media_left_file_id INTEGER,
+        media_right_file_id INTEGER,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (display_unit_id) REFERENCES display_units(id),
+        FOREIGN KEY (current_scene_id) REFERENCES display_scenes(id),
+        FOREIGN KEY (active_notice_id) REFERENCES display_notices(id),
+        FOREIGN KEY (media_full_file_id) REFERENCES display_assets(id),
+        FOREIGN KEY (media_left_file_id) REFERENCES display_assets(id),
+        FOREIGN KEY (media_right_file_id) REFERENCES display_assets(id)
+      );
+
+      INSERT INTO display_settings_new (
+        id, display_unit_id, mode, current_scene_id, active_notice_id,
+        media_full_file_id, media_left_file_id, media_right_file_id, updated_at
+      )
+      SELECT
+        s.id,
+        ${unit1.id},
+        s.mode,
+        s.current_scene_id,
+        s.active_notice_id,
+        s.media_full_file_id,
+        s.media_left_file_id,
+        s.media_right_file_id,
+        s.updated_at
+      FROM display_settings s;
+
+      DROP TABLE display_settings;
+      ALTER TABLE display_settings_new RENAME TO display_settings;
+    `)
+  }
+
+  // Unit1: 기존 데이터 유지, settings만 보장
+  ensureUnitSettingsAndScenes(database, unit1.id, false)
+  // Unit2: 기본 scenes + settings 시드
+  ensureUnitSettingsAndScenes(database, unit2.id, true)
+}
+
 function initializeSchema(database: Database.Database): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS display_notices (
@@ -353,6 +563,9 @@ function initializeSchema(database: Database.Database): void {
       )
       .run()
   }
+
+  // singleton seed 이후 Display Unit 이관 (idempotent)
+  migrateDisplayUnitsIfNeeded(database)
 }
 
 function migrateGoogleContactsIfNeeded(database: Database.Database): void {

@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server"
-import { applyDisplayScene } from "@/lib/db/display-scenes"
+import {
+  applyDisplayScene,
+  getDisplaySceneById,
+} from "@/lib/db/display-scenes"
+import { getDisplayUnitByCode } from "@/lib/db/display-units"
 
 export const dynamic = "force-dynamic"
 
@@ -13,7 +17,7 @@ function parseId(rawId: string): number | null {
   return id
 }
 
-export async function POST(_request: Request, context: RouteContext) {
+export async function POST(request: Request, context: RouteContext) {
   try {
     const { id: rawId } = await context.params
     const id = parseId(rawId)
@@ -23,6 +27,24 @@ export async function POST(_request: Request, context: RouteContext) {
         { success: false, error: "유효하지 않은 id입니다." },
         { status: 400 },
       )
+    }
+
+    const body = (await request.json().catch(() => ({}))) as {
+      unitCode?: string
+    }
+
+    if (body.unitCode?.trim()) {
+      const unit = getDisplayUnitByCode(body.unitCode.trim())
+      const scene = getDisplaySceneById(id)
+      if (!unit || !scene || scene.display_unit_id !== unit.id) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "다른 전광판의 Scene은 적용할 수 없습니다.",
+          },
+          { status: 403 },
+        )
+      }
     }
 
     const scene = applyDisplayScene(id)
