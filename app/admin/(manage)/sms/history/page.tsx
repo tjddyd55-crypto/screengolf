@@ -68,13 +68,21 @@ export default function AdminSmsHistoryPage() {
             ) : (
               rows.map((row) => (
                 <tr key={row.id}>
-                  <td>{row.title}</td>
-                  <td>{row.send_mode}</td>
-                  <td>{row.completed_at ?? row.started_at ?? row.scheduled_at ?? "-"}</td>
-                  <td>{row.success_count}</td>
-                  <td>{row.failed_count}</td>
-                  <td>{row.excluded_recipients}</td>
-                  <td>
+                  <td data-label="제목">{row.title}</td>
+                  <td data-label="발송 방식">{row.send_mode}</td>
+                  <td data-label="예약/실행 시각">
+                    {row.completed_at ?? row.started_at ?? row.scheduled_at ?? "-"}
+                  </td>
+                  <td className={styles.desktopCol} data-label="성공">
+                    {row.success_count}
+                  </td>
+                  <td className={styles.desktopCol} data-label="실패">
+                    {row.failed_count}
+                  </td>
+                  <td className={styles.desktopCol} data-label="제외">
+                    {row.excluded_recipients}
+                  </td>
+                  <td data-label="상태">
                     {
                       mapStoreSmsCampaignStatusLabel(
                         row.status,
@@ -82,7 +90,7 @@ export default function AdminSmsHistoryPage() {
                       ).label
                     }
                   </td>
-                  <td>
+                  <td data-label="상세">
                     <Link href={`/admin/sms/${row.id}`} className={styles.btnLink}>
                       보기
                     </Link>

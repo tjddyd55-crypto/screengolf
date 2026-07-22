@@ -155,9 +155,9 @@ export default function AdminNoticesPage() {
             ) : (
               notices.map((notice) => (
                 <tr key={notice.id}>
-                  <td>{notice.title}</td>
-                  <td>{NOTICE_THEME_LABELS[notice.theme]}</td>
-                  <td>
+                  <td data-label="제목">{notice.title}</td>
+                  <td data-label="테마">{NOTICE_THEME_LABELS[notice.theme]}</td>
+                  <td data-label="상태">
                     <span
                       className={`${styles.badge} ${
                         notice.is_active ? styles.badgeActive : styles.badgeInactive
@@ -166,8 +166,10 @@ export default function AdminNoticesPage() {
                       {notice.is_active ? "활성" : "비활성"}
                     </span>
                   </td>
-                  <td>{notice.updated_at.slice(0, 16).replace("T", " ")}</td>
-                  <td>
+                  <td className={styles.desktopCol} data-label="수정일">
+                    {notice.updated_at.slice(0, 16).replace("T", " ")}
+                  </td>
+                  <td data-label="관리">
                     <div className={styles.buttonRow}>
                       <button
                         type="button"

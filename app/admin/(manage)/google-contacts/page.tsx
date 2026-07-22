@@ -550,11 +550,11 @@ function GoogleContactsPageInner() {
                 />
               </th>
               <th>이름</th>
-              <th>닉네임</th>
+              <th className={styles.desktopCol}>닉네임</th>
               <th>연락처</th>
               <th>Google 연동 상태</th>
-              <th>마지막 동기화</th>
-              <th>문자 수신거부</th>
+              <th className={styles.desktopCol}>마지막 동기화</th>
+              <th className={styles.desktopCol}>문자 수신거부</th>
               <th>관리</th>
             </tr>
           </thead>
@@ -566,7 +566,7 @@ function GoogleContactsPageInner() {
             ) : (
               contacts.map((contact) => (
                 <tr key={contact.id}>
-                  <td>
+                  <td data-label="선택">
                     <input
                       type="checkbox"
                       checked={selectedIds.includes(contact.id)}
@@ -574,7 +574,7 @@ function GoogleContactsPageInner() {
                       aria-label={`${contact.name} 선택`}
                     />
                   </td>
-                  <td title={contact.name}>
+                  <td data-label="이름" title={contact.name}>
                     {contact.name}
                     {!contact.is_active ? (
                       <>
@@ -587,18 +587,30 @@ function GoogleContactsPageInner() {
                       </>
                     ) : null}
                   </td>
-                  <td title={contact.nickname ?? ""}>
+                  <td
+                    className={styles.desktopCol}
+                    data-label="닉네임"
+                    title={contact.nickname ?? ""}
+                  >
                     {contact.nickname ?? "-"}
                   </td>
-                  <td title={contact.phone}>
+                  <td data-label="연락처" title={contact.phone}>
                     {formatPhoneDisplay(contact.phone)}
                   </td>
-                  <td>{syncStatusLabel(contact.google_sync_status)}</td>
-                  <td title={contact.last_synced_at ?? ""}>
+                  <td data-label="Google 상태">
+                    {syncStatusLabel(contact.google_sync_status)}
+                  </td>
+                  <td
+                    className={styles.desktopCol}
+                    data-label="동기화"
+                    title={contact.last_synced_at ?? ""}
+                  >
                     {formatSyncedAt(contact.last_synced_at)}
                   </td>
-                  <td>{contact.sms_opt_out ? "수신거부" : "수신 가능"}</td>
-                  <td>
+                  <td className={styles.desktopCol} data-label="수신거부">
+                    {contact.sms_opt_out ? "수신거부" : "수신 가능"}
+                  </td>
+                  <td data-label="관리">
                     <div className={styles.rowActions}>
                       <button
                         type="button"

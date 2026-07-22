@@ -284,7 +284,7 @@ export default function AdminSmsCartPage() {
             ) : (
               contacts.map((contact) => (
                 <tr key={contact.id}>
-                  <td>
+                  <td data-label="선택">
                     <input
                       type="checkbox"
                       checked={selectedIds.includes(contact.id)}
@@ -297,12 +297,26 @@ export default function AdminSmsCartPage() {
                       }
                     />
                   </td>
-                  <td title={contact.name}>{contact.name}</td>
-                  <td title={contact.nickname ?? ""}>{contact.nickname ?? "-"}</td>
-                  <td title={contact.phone}>{formatPhone(contact.phone)}</td>
-                  <td>{contact.google_sync_status}</td>
-                  <td>{contact.sms_opt_out ? "수신거부" : "수신 가능"}</td>
-                  <td>
+                  <td data-label="이름" title={contact.name}>
+                    {contact.name}
+                  </td>
+                  <td
+                    className={styles.desktopCol}
+                    data-label="닉네임"
+                    title={contact.nickname ?? ""}
+                  >
+                    {contact.nickname ?? "-"}
+                  </td>
+                  <td data-label="연락처" title={contact.phone}>
+                    {formatPhone(contact.phone)}
+                  </td>
+                  <td className={styles.desktopCol} data-label="연동 상태">
+                    {contact.google_sync_status}
+                  </td>
+                  <td className={styles.desktopCol} data-label="수신거부">
+                    {contact.sms_opt_out ? "수신거부" : "수신 가능"}
+                  </td>
+                  <td data-label="관리">
                     <button
                       type="button"
                       className={`${styles.btn} ${styles.btnDanger}`}

@@ -83,15 +83,21 @@ export default function AdminSmsScheduledPage() {
             ) : (
               rows.map((row) => (
                 <tr key={row.id}>
-                  <td>{row.title}</td>
-                  <td>{row.scheduled_at ?? "-"}</td>
-                  <td>{row.total_recipients}</td>
-                  <td>{row.sendable_recipients}</td>
-                  <td>
+                  <td data-label="제목">{row.title}</td>
+                  <td data-label="예약시각">{row.scheduled_at ?? "-"}</td>
+                  <td className={styles.desktopCol} data-label="총 대상">
+                    {row.total_recipients}
+                  </td>
+                  <td className={styles.desktopCol} data-label="발송 가능">
+                    {row.sendable_recipients}
+                  </td>
+                  <td data-label="상태">
                     {mapStoreSmsCampaignStatusLabel(row.status, "scheduled").label}
                   </td>
-                  <td>{row.created_at}</td>
-                  <td>
+                  <td className={styles.desktopCol} data-label="생성일">
+                    {row.created_at}
+                  </td>
+                  <td data-label="관리">
                     <div className={styles.rowActions}>
                       <Link
                         href={`/admin/sms/${row.id}`}

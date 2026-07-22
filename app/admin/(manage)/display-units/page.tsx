@@ -171,13 +171,17 @@ export default function AdminDisplayUnitsPage() {
             ) : (
               units.map((unit) => (
                 <tr key={unit.id}>
-                  <td>{unit.name}</td>
-                  <td>{unit.code}</td>
-                  <td>{unit.sort_order}</td>
-                  <td>
+                  <td data-label="이름">{unit.name}</td>
+                  <td className={styles.desktopCol} data-label="코드">
+                    {unit.code}
+                  </td>
+                  <td className={styles.desktopCol} data-label="정렬">
+                    {unit.sort_order}
+                  </td>
+                  <td data-label="현재 화면">
                     {unit.current_scene?.name ?? unit.current_mode ?? "-"}
                   </td>
-                  <td>
+                  <td data-label="상태">
                     <span
                       className={`${styles.badge} ${
                         unit.is_active
@@ -188,7 +192,7 @@ export default function AdminDisplayUnitsPage() {
                       {unit.is_active ? "활성" : "비활성"}
                     </span>
                   </td>
-                  <td>
+                  <td data-label="관리">
                     <div className={styles.buttonRow}>
                       <Link
                         href={`/admin/display-scenes/${unit.code}`}

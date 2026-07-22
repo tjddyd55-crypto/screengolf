@@ -346,11 +346,15 @@ export default function AdminSmsDetailPage() {
               ) : (
                 recipients.map((row) => (
                   <tr key={row.id}>
-                    <td>{row.name}</td>
-                    <td>{row.phone}</td>
-                    <td>{row.status}</td>
-                    <td>{row.exclusion_reason ?? row.error_message ?? "-"}</td>
-                    <td>{row.provider_message_id ?? "-"}</td>
+                    <td data-label="이름">{row.name}</td>
+                    <td data-label="연락처">{row.phone}</td>
+                    <td data-label="상태">{row.status}</td>
+                    <td data-label="제외/오류">
+                      {row.exclusion_reason ?? row.error_message ?? "-"}
+                    </td>
+                    <td className={styles.desktopCol} data-label="provider id">
+                      {row.provider_message_id ?? "-"}
+                    </td>
                   </tr>
                 ))
               )}

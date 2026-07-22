@@ -289,15 +289,20 @@ export default function AdminMembersPage() {
             ) : (
               members.map((member) => (
                 <tr key={member.id}>
-                  <td>{member.name}</td>
-                  <td>{member.nickname ?? "-"}</td>
-                  <td>{member.phone ?? "-"}</td>
-                  <td>{member.plan_name ?? member.plan_type ?? "-"}</td>
-                  <td>{member.expires_at ?? "-"}</td>
-                  <td className={remainingClass(member.remaining_status)}>
+                  <td data-label="이름">{member.name}</td>
+                  <td data-label="닉네임">{member.nickname ?? "-"}</td>
+                  <td data-label="연락처">{member.phone ?? "-"}</td>
+                  <td data-label="요금제">
+                    {member.plan_name ?? member.plan_type ?? "-"}
+                  </td>
+                  <td data-label="만기일">{member.expires_at ?? "-"}</td>
+                  <td
+                    data-label="남은일수"
+                    className={remainingClass(member.remaining_status)}
+                  >
                     {member.remaining_label}
                   </td>
-                  <td>
+                  <td data-label="상태">
                     <span
                       className={`${styles.badge} ${
                         member.is_active ? styles.badgeActive : styles.badgeInactive
@@ -306,7 +311,7 @@ export default function AdminMembersPage() {
                       {member.is_active ? "활성" : "비활성"}
                     </span>
                   </td>
-                  <td>
+                  <td data-label="관리">
                     <div className={styles.buttonRow}>
                       <button
                         type="button"

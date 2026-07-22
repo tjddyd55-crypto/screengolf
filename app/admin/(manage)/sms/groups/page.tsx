@@ -151,14 +151,22 @@ export default function AdminSmsGroupsPage() {
             ) : (
               groups.map((group) => (
                 <tr key={group.id}>
-                  <td title={group.name}>{group.name}</td>
-                  <td title={group.description ?? ""}>
+                  <td data-label="그룹명" title={group.name}>
+                    {group.name}
+                  </td>
+                  <td
+                    className={styles.desktopCol}
+                    data-label="설명"
+                    title={group.description ?? ""}
+                  >
                     {group.description ?? "-"}
                   </td>
-                  <td>{group.member_count}</td>
-                  <td>{group.sendableEstimate}</td>
-                  <td>{group.updated_at}</td>
-                  <td>
+                  <td data-label="저장 인원">{group.member_count}</td>
+                  <td data-label="발송 가능 예상">{group.sendableEstimate}</td>
+                  <td className={styles.desktopCol} data-label="수정일">
+                    {group.updated_at}
+                  </td>
+                  <td data-label="관리">
                     <div className={styles.rowActions}>
                       <button
                         type="button"

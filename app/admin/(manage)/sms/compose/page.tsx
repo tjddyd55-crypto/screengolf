@@ -400,7 +400,7 @@ function SmsComposeInner() {
             </p>
           </div>
         ) : null}
-        <div className={styles.buttonRow}>
+        <div className={`${styles.stickyBottomBar} ${styles.composeActions}`}>
           <button type="submit" className={`${styles.btn} ${styles.btnPrimary}`}>
             최종 확인
           </button>

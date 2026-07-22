@@ -185,10 +185,14 @@ export default function AdminPlanTypesPage() {
             ) : (
               planTypes.map((planType) => (
                 <tr key={planType.id}>
-                  <td>{planType.name}</td>
-                  <td>{planType.code}</td>
-                  <td>{planType.sort_order}</td>
-                  <td>
+                  <td data-label="이름">{planType.name}</td>
+                  <td className={styles.desktopCol} data-label="코드">
+                    {planType.code}
+                  </td>
+                  <td className={styles.desktopCol} data-label="정렬">
+                    {planType.sort_order}
+                  </td>
+                  <td data-label="상태">
                     <span
                       className={`${styles.badge} ${
                         planType.is_active ? styles.badgeActive : styles.badgeInactive
@@ -197,7 +201,7 @@ export default function AdminPlanTypesPage() {
                       {planType.is_active ? "활성" : "비활성"}
                     </span>
                   </td>
-                  <td>
+                  <td data-label="관리">
                     <div className={styles.buttonRow}>
                       <button
                         type="button"
