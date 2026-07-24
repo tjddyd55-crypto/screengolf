@@ -1,5 +1,10 @@
 import { getDb } from "./sqlite"
 import type { DisplayMode } from "@/lib/admin/constants"
+import {
+  isProtectedDisplayUnitCode,
+  normalizeDisplayUnitCode,
+  protectedUnitDeleteErrorMessage,
+} from "@/lib/display/protected-units"
 
 export const DEFAULT_DISPLAY_UNIT_CODE = "display-1"
 
@@ -190,10 +195,10 @@ export function updateDisplayUnit(
   if (!current) return null
 
   if (
-    current.code === DEFAULT_DISPLAY_UNIT_CODE &&
+    isProtectedDisplayUnitCode(current.code) &&
     input.is_active === false
   ) {
-    throw new Error("기본 전광판(display-1)은 비활성할 수 없습니다.")
+    throw new Error(protectedUnitDeleteErrorMessage())
   }
 
   getDb()
@@ -216,8 +221,8 @@ export function deactivateDisplayUnit(id: number): boolean {
   const current = getDisplayUnitById(id)
   if (!current) return false
 
-  if (current.code === DEFAULT_DISPLAY_UNIT_CODE) {
-    throw new Error("기본 전광판(display-1)은 삭제할 수 없습니다.")
+  if (isProtectedDisplayUnitCode(current.code)) {
+    throw new Error(protectedUnitDeleteErrorMessage())
   }
 
   const result = getDb()
@@ -229,6 +234,65 @@ export function deactivateDisplayUnit(id: number): boolean {
     .run(id)
 
   return result.changes > 0
+}
+
+/**
+ * 사용자 추가 전광판을 실제 삭제한다.
+ * - display-1 / display-2 차단
+ * - 해당 Unit의 settings·scenes만 정리
+ * - display_assets / notices / ranking 데이터는 유지
+ */
+export function deleteDisplayUnitByCode(code: string): DisplayUnit {
+  const trimmed = code.trim()
+  if (!trimmed || !/^display-\d+$/i.test(trimmed)) {
+    throw new Error("올바르지 않은 전광판 코드입니다.")
+  }
+
+  const normalized = normalizeDisplayUnitCode(trimmed)
+  if (isProtectedDisplayUnitCode(normalized)) {
+    throw new Error(protectedUnitDeleteErrorMessage())
+  }
+
+  const current = getDisplayUnitByCode(normalized)
+  if (!current) {
+    throw new Error("전광판을 찾을 수 없습니다.")
+  }
+
+  const unitId = current.id
+
+  const remove = getDb().transaction(() => {
+    getDb()
+      .prepare(
+        `UPDATE display_settings
+         SET current_scene_id = NULL,
+             active_notice_id = NULL,
+             media_full_file_id = NULL,
+             media_left_file_id = NULL,
+             media_right_file_id = NULL,
+             updated_at = datetime('now')
+         WHERE display_unit_id = ?`,
+      )
+      .run(unitId)
+
+    getDb()
+      .prepare("DELETE FROM display_scenes WHERE display_unit_id = ?")
+      .run(unitId)
+
+    getDb()
+      .prepare("DELETE FROM display_settings WHERE display_unit_id = ?")
+      .run(unitId)
+
+    const result = getDb()
+      .prepare("DELETE FROM display_units WHERE id = ?")
+      .run(unitId)
+
+    if (result.changes === 0) {
+      throw new Error("전광판 삭제에 실패했습니다.")
+    }
+  })
+
+  remove()
+  return current
 }
 
 export function resolveUnitId(

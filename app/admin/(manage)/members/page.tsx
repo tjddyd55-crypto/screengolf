@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import styles from "../../admin.module.css"
+import { PencilIcon, TrashIcon } from "../../AdminIcons"
 
 type PlanTypeOption = {
   id: number
@@ -203,28 +204,27 @@ export default function AdminMembersPage() {
 
   return (
     <>
-      <div style={{ marginBottom: 16 }}>
-        <Link href="/admin" className={styles.btnLink}>
-          ← 관리자 홈
-        </Link>
-      </div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 20,
-        }}
-      >
-        <h2 className={styles.pageTitle} style={{ margin: 0 }}>
-          회원관리
-        </h2>
+      <Link href="/admin" className={`${styles.backLink} ${styles.desktopOnly}`}>
+        ← 관리자 홈
+      </Link>
+
+      <div className={styles.pageHeaderCompact}>
+        <div className={styles.pageTitleWithBack}>
+          <Link
+            href="/admin"
+            className={`${styles.mobileBackBtn} ${styles.mobileOnly}`}
+            aria-label="관리자 홈으로"
+          >
+            ←
+          </Link>
+          <h2 className={styles.pageTitleInline}>회원관리</h2>
+        </div>
         <button
           type="button"
-          className={`${styles.btn} ${styles.btnPrimary}`}
+          className={`${styles.btn} ${styles.btnPrimary} ${styles.btnCompact}`}
           onClick={openCreateModal}
         >
-          회원 등록
+          + 회원 등록
         </button>
       </div>
 
@@ -235,19 +235,19 @@ export default function AdminMembersPage() {
         <div className={`${styles.message} ${styles.messageError}`}>{error}</div>
       ) : null}
 
-      <div className={styles.filterRow}>
+      <div className={`${styles.filterRow} ${styles.membersFilterRow}`}>
         <input
-          className={styles.formInput}
-          style={{ maxWidth: 240 }}
+          className={`${styles.formInput} ${styles.membersSearchInput}`}
           placeholder="이름 / 닉네임 / 연락처 검색"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          aria-label="회원 검색"
         />
         <select
-          className={styles.formSelect}
-          style={{ maxWidth: 180 }}
+          className={`${styles.formSelect} ${styles.membersFilterSelect}`}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
+          aria-label="회원 필터"
         >
           <option value="all">전체</option>
           <option value="active">활성</option>
@@ -260,14 +260,14 @@ export default function AdminMembersPage() {
         </select>
         <button
           type="button"
-          className={`${styles.btn} ${styles.btnSecondary}`}
+          className={`${styles.btn} ${styles.btnSecondary} ${styles.membersSearchBtn}`}
           onClick={loadMembers}
         >
           검색
         </button>
       </div>
 
-      <div className={`${styles.panel} ${styles.tableWrap}`}>
+      <div className={`${styles.panel} ${styles.tableWrap} ${styles.desktopOnly}`}>
         <table className={styles.table}>
           <thead>
             <tr>
@@ -289,20 +289,15 @@ export default function AdminMembersPage() {
             ) : (
               members.map((member) => (
                 <tr key={member.id}>
-                  <td data-label="이름">{member.name}</td>
-                  <td data-label="닉네임">{member.nickname ?? "-"}</td>
-                  <td data-label="연락처">{member.phone ?? "-"}</td>
-                  <td data-label="요금제">
-                    {member.plan_name ?? member.plan_type ?? "-"}
-                  </td>
-                  <td data-label="만기일">{member.expires_at ?? "-"}</td>
-                  <td
-                    data-label="남은일수"
-                    className={remainingClass(member.remaining_status)}
-                  >
+                  <td>{member.name}</td>
+                  <td>{member.nickname ?? "-"}</td>
+                  <td>{member.phone ?? "-"}</td>
+                  <td>{member.plan_name ?? member.plan_type ?? "-"}</td>
+                  <td>{member.expires_at ?? "-"}</td>
+                  <td className={remainingClass(member.remaining_status)}>
                     {member.remaining_label}
                   </td>
-                  <td data-label="상태">
+                  <td>
                     <span
                       className={`${styles.badge} ${
                         member.is_active ? styles.badgeActive : styles.badgeInactive
@@ -311,7 +306,7 @@ export default function AdminMembersPage() {
                       {member.is_active ? "활성" : "비활성"}
                     </span>
                   </td>
-                  <td data-label="관리">
+                  <td>
                     <div className={styles.buttonRow}>
                       <button
                         type="button"
@@ -336,13 +331,88 @@ export default function AdminMembersPage() {
         </table>
       </div>
 
+      <div className={`${styles.memberCardList} ${styles.mobileOnly}`}>
+        {members.length === 0 ? (
+          <div className={styles.panel}>등록된 회원이 없습니다.</div>
+        ) : (
+          members.map((member) => {
+            const planLabel = member.plan_name ?? member.plan_type ?? "-"
+            const expiresLabel = member.expires_at ?? "-"
+            const phoneDigits = (member.phone ?? "").replace(/[^\d+]/g, "")
+            return (
+              <article key={member.id} className={styles.memberCard}>
+                <div className={styles.memberCardTop}>
+                  <div className={styles.memberCardIdentity}>
+                    <span className={styles.memberCardName}>{member.name}</span>
+                    {member.nickname ? (
+                      <span className={styles.memberCardNickname}>
+                        · {member.nickname}
+                      </span>
+                    ) : null}
+                  </div>
+                  <span
+                    className={`${styles.badge} ${
+                      member.is_active ? styles.badgeActive : styles.badgeInactive
+                    }`}
+                  >
+                    {member.is_active ? "활성" : "비활성"}
+                  </span>
+                </div>
+                {member.phone ? (
+                  <a
+                    href={`tel:${phoneDigits || member.phone}`}
+                    className={styles.memberCardPhone}
+                    aria-label={`${member.name} 연락처`}
+                  >
+                    {member.phone}
+                  </a>
+                ) : (
+                  <p className={styles.memberCardPhoneMuted}>연락처 없음</p>
+                )}
+                <div className={styles.memberCardMeta}>
+                  <span className={styles.memberCardMetaLeft}>
+                    {planLabel} · {expiresLabel}
+                  </span>
+                  <span className={remainingClass(member.remaining_status)}>
+                    {member.remaining_label}
+                  </span>
+                </div>
+                <div className={styles.memberCardActions}>
+                  <button
+                    type="button"
+                    className={`${styles.btn} ${styles.btnSecondary} ${styles.btnWithIcon}`}
+                    onClick={() => openEditModal(member)}
+                    aria-label={`${member.name} 수정`}
+                  >
+                    <PencilIcon size={16} />
+                    수정
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.btn} ${styles.btnDangerOutline} ${styles.btnWithIcon}`}
+                    onClick={() => handleDelete(member.id)}
+                    aria-label={`${member.name} 삭제`}
+                  >
+                    <TrashIcon size={16} />
+                    삭제
+                  </button>
+                </div>
+              </article>
+            )
+          })
+        )}
+      </div>
+
       {showModal ? (
         <div className={styles.modalOverlay}>
-          <div className={styles.modal}>
+          <div className={`${styles.modal} ${styles.modalMobileSheet}`}>
             <h3 className={styles.modalTitle}>
               {editingId ? "회원 수정" : "회원 등록"}
             </h3>
-            <form onSubmit={handleSubmit}>
+            <form
+              onSubmit={handleSubmit}
+              className={styles.modalFormScroll}
+            >
               <div className={styles.formGroup}>
                 <label className={styles.formLabel}>이름</label>
                 <input
@@ -413,7 +483,7 @@ export default function AdminMembersPage() {
                   활성
                 </label>
               </div>
-              <div className={styles.buttonRow}>
+              <div className={`${styles.buttonRow} ${styles.modalFooterActions}`}>
                 <button type="submit" className={`${styles.btn} ${styles.btnPrimary}`}>
                   저장
                 </button>

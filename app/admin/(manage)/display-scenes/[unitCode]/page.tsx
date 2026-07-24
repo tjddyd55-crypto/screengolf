@@ -380,6 +380,7 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
   }
 
   const activeScenes = scenes.filter((scene) => scene.is_active)
+  const currentScene = activeScenes.find((scene) => scene.is_current)
 
   return (
     <>
@@ -406,6 +407,22 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
         </div>
       </div>
 
+      {currentScene ? (
+        <div
+          className={`${styles.panel} ${styles.currentAppliedBanner} ${styles.cardApplied}`}
+        >
+          <p className={styles.liveStatus}>
+            <span className={styles.liveStatusDot} aria-hidden="true" />
+            현재 송출 중
+          </p>
+          <p className={styles.appliedLabel}>현재 적용 화면</p>
+          <p className={styles.appliedSceneName}>{currentScene.name}</p>
+          <p className={styles.appliedModeLine}>
+            {DISPLAY_MODE_LABELS[currentScene.mode]}
+          </p>
+        </div>
+      ) : null}
+
       {message ? (
         <div className={`${styles.message} ${styles.messageSuccess}`}>{message}</div>
       ) : null}
@@ -422,18 +439,23 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
             return (
               <div
                 key={scene.id}
-                className={`${styles.card} ${styles.cardStatic}`}
+                className={`${styles.card} ${styles.cardStatic} ${
+                  scene.is_current ? styles.cardApplied : ""
+                }`}
               >
                 <div className={styles.cardHeader}>
                   <h3 className={styles.cardTitle} title={scene.name}>
                     {scene.name}
                   </h3>
                   {scene.is_current ? (
-                    <span className={`${styles.badge} ${styles.badgeActive}`}>
-                      적용 중
+                    <span className={`${styles.badge} ${styles.badgeApplied}`}>
+                      현재 적용 중
                     </span>
                   ) : null}
                 </div>
+                {scene.is_current ? (
+                  <p className={styles.modeCheckMark}>✓ 현재 적용 중</p>
+                ) : null}
                 <p className={`${styles.cardDesc} ${styles.cardDescCompact}`}>
                   {DISPLAY_MODE_LABELS[scene.mode]}
                 </p>
@@ -463,7 +485,7 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
                       disabled={scene.is_current}
                       onClick={() => handleApply(scene)}
                     >
-                      적용
+                      {scene.is_current ? "적용 중" : "적용"}
                     </button>
                     <button
                       type="button"

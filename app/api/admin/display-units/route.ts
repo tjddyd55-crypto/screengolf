@@ -21,6 +21,7 @@ export async function GET() {
         ...unit,
         current_mode: settings?.mode ?? "ranking",
         current_scene: settings?.current_scene ?? null,
+        settings_updated_at: settings?.updated_at ?? null,
       }
     })
 

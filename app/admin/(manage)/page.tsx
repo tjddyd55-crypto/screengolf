@@ -4,7 +4,13 @@ import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import styles from "../admin.module.css"
-import { DISPLAY_MODE_LABELS, type DisplayMode } from "@/lib/admin/constants"
+import { type DisplayMode } from "@/lib/admin/constants"
+import {
+  formatCurrentAppliedSceneLabel,
+  formatSettingsUpdatedAt,
+  getDisplayModeLabel,
+} from "@/lib/display/current-applied"
+import { MonitorIcon } from "../AdminIcons"
 
 type DisplayUnitCard = {
   id: number
@@ -14,6 +20,7 @@ type DisplayUnitCard = {
   is_active: boolean
   current_mode: DisplayMode
   current_scene: { id: number; name: string } | null
+  settings_updated_at?: string | null
 }
 
 function storeUrl(code: string): string {
@@ -107,52 +114,65 @@ export default function AdminHomePage() {
 
       <h3 className={styles.sectionTitle}>전광판 관리</h3>
       <div className={styles.homeGrid}>
-        {units.map((unit) => (
-          <div key={unit.id} className={`${styles.card} ${styles.cardStatic}`}>
-            <div className={styles.cardHeader}>
-              <h3 className={styles.cardTitle}>{unit.name}</h3>
-              <span
-                className={`${styles.badge} ${
-                  unit.is_active ? styles.badgeActive : styles.badgeInactive
-                }`}
-              >
-                {unit.is_active ? "활성" : "비활성"}
-              </span>
+        {units.map((unit) => {
+          const modeLabel = getDisplayModeLabel(unit.current_mode)
+          const sceneLabel = formatCurrentAppliedSceneLabel({
+            sceneName: unit.current_scene?.name,
+            modeLabel,
+          })
+          const updatedLabel = formatSettingsUpdatedAt(
+            unit.settings_updated_at,
+          )
+          return (
+            <div
+              key={unit.id}
+              className={`${styles.card} ${styles.cardStatic} ${styles.cardApplied}`}
+            >
+              <div className={styles.cardHeader}>
+                <div className={styles.unitTitleRow}>
+                  <span className={styles.unitTitleIcon}>
+                    <MonitorIcon size={20} />
+                  </span>
+                  <h3 className={styles.cardTitle}>{unit.name}</h3>
+                </div>
+              </div>
+              <p className={styles.liveStatus}>
+                <span className={styles.liveStatusDot} aria-hidden="true" />
+                현재 송출 중
+              </p>
+              <p className={styles.appliedLabel}>현재 적용 화면</p>
+              <p className={styles.appliedSceneName}>{sceneLabel}</p>
+              <p className={styles.appliedModeLine}>{modeLabel}</p>
+              {updatedLabel ? (
+                <p className={styles.appliedMetaLine}>
+                  마지막 변경 {updatedLabel}
+                </p>
+              ) : null}
+              <p className={styles.cardMeta}>{unit.code}</p>
+              <div className={styles.cardActions}>
+                <Link
+                  href={`/admin/display/${unit.code}`}
+                  className={`${styles.btn} ${styles.btnPrimary}`}
+                >
+                  빠른 설정
+                </Link>
+                <Link
+                  href={`/admin/display-scenes/${unit.code}`}
+                  className={`${styles.btn} ${styles.btnSecondary}`}
+                >
+                  Scene 관리
+                </Link>
+                <Link
+                  href={storeUrl(unit.code)}
+                  target="_blank"
+                  className={`${styles.btn} ${styles.btnSecondary}`}
+                >
+                  전광판 보기
+                </Link>
+              </div>
             </div>
-            <p className={styles.cardDesc}>
-              현재 화면:{" "}
-              {unit.current_scene?.name ??
-                DISPLAY_MODE_LABELS[unit.current_mode] ??
-                unit.current_mode}
-            </p>
-            <p className={styles.cardMeta}>
-              모드:{" "}
-              {DISPLAY_MODE_LABELS[unit.current_mode] ?? unit.current_mode} ·{" "}
-              {unit.code}
-            </p>
-            <div className={styles.cardActions}>
-              <Link
-                href={`/admin/display/${unit.code}`}
-                className={`${styles.btn} ${styles.btnPrimary}`}
-              >
-                빠른 설정
-              </Link>
-              <Link
-                href={`/admin/display-scenes/${unit.code}`}
-                className={`${styles.btn} ${styles.btnSecondary}`}
-              >
-                Scene 관리
-              </Link>
-              <Link
-                href={storeUrl(unit.code)}
-                target="_blank"
-                className={`${styles.btn} ${styles.btnSecondary}`}
-              >
-                전광판 보기
-              </Link>
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       <h3 className={styles.sectionTitle}>매장 관리</h3>

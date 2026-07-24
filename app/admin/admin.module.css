@@ -149,7 +149,7 @@
 }
 
 .desktopOnly {
-  display: contents;
+  display: block;
 }
 
 .mobileOnly {
@@ -442,10 +442,360 @@
   color: white;
 }
 
+.btnDangerOutline {
+  background: transparent;
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.55);
+}
+
 .btnLink {
   background: transparent;
   color: #38bdf8;
   padding: 0;
+}
+
+.btnCompact {
+  width: auto;
+  flex-shrink: 0;
+  min-height: 40px;
+  height: 40px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
+.pageHeaderCompact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.pageTitleWithBack {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.pageTitleInline {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobileBackBtn {
+  display: none;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #1e293b;
+  color: #e2e8f0;
+  text-decoration: none;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.membersFilterRow {
+  margin-bottom: 16px;
+}
+
+.memberCardList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.memberCard {
+  padding: 16px;
+  border-radius: 16px;
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.memberCardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.memberCardIdentity {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.memberCardName {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.memberCardNickname {
+  font-size: 13px;
+  font-weight: 500;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.memberCardPhone,
+.memberCardPhoneMuted {
+  display: block;
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: #7dd3fc;
+  text-decoration: none;
+  word-break: keep-all;
+}
+
+.memberCardPhoneMuted {
+  color: #64748b;
+}
+
+.memberCardMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+.memberCardMetaLeft {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memberCardActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.memberCardActions .btn {
+  min-height: 40px;
+  height: 40px;
+  padding: 0 12px;
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.memberCardActions .btnWithIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.cardApplied {
+  border: 2px solid #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.16);
+}
+
+.badgeApplied {
+  background: rgba(56, 189, 248, 0.2);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+}
+
+.liveStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #86efac;
+}
+
+.liveStatusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.22);
+  flex-shrink: 0;
+}
+
+.unitTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.unitTitleIcon {
+  color: #7dd3fc;
+  flex-shrink: 0;
+  display: inline-flex;
+}
+
+.unitCardRemoving {
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+
+.btnWithIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btnWithIcon svg {
+  flex-shrink: 0;
+}
+
+.appliedLabel {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  letter-spacing: 0.02em;
+}
+
+.appliedSceneName {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.3;
+  word-break: keep-all;
+}
+
+.appliedModeLine {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #cbd5e1;
+}
+
+.appliedMetaLine {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.currentAppliedBanner {
+  margin-bottom: 16px;
+}
+
+.currentAppliedBanner .appliedSceneName {
+  font-size: 20px;
+}
+
+.unitCardActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.unitCardActions .btn {
+  min-height: 40px;
+  height: 40px;
+  padding: 0 10px;
+  font-size: 13px;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.unitCardList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.unitCard {
+  padding: 16px;
+  border-radius: 16px;
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.unitCardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.unitCardTitle {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unitCardCode {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.modeCheckMark {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #7dd3fc;
+}
+
+.modalFormScroll {
+  display: flex;
+  flex-direction: column;
+}
+
+.modalFooterActions {
+  margin-top: 4px;
+}
+
+.deleteConfirmBody {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+
+.deleteConfirmWarn {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #f87171;
+  line-height: 1.45;
 }
 
 .tableWrap {
@@ -1086,11 +1436,12 @@
 /* ========== Mobile-only layout (Desktop unchanged above 768px) ========== */
 @media (max-width: 768px) {
   .adminHeader {
-    padding: 12px 16px;
-    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+    padding: 10px 16px;
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
     position: sticky;
     top: 0;
     z-index: 45;
+    min-height: 0;
   }
 
   .adminHeaderDesktop {
@@ -1099,6 +1450,34 @@
 
   .adminHeaderMobile {
     display: flex;
+    min-height: 44px;
+  }
+
+  .mobileHeaderText {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .adminHeaderBrand {
+    font-size: 16px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .mobileCurrentPage {
+    display: none;
+  }
+
+  .hamburgerBtn {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    gap: 5px;
+  }
+
+  .hamburgerBtn span {
+    width: 20px;
   }
 
   .desktopOnly {
@@ -1109,28 +1488,53 @@
     display: block !important;
   }
 
+  .mobileBackBtn {
+    display: inline-flex !important;
+  }
+
   .adminMain {
     max-width: none;
-    padding: 20px 16px;
+    padding: 16px;
     padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px));
     overflow-x: hidden;
   }
 
   .pageHeader {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
     gap: 12px;
     margin-bottom: 16px;
   }
 
+  .pageHeader .btn {
+    width: auto;
+    min-height: 40px;
+    height: 40px;
+    padding: 0 14px;
+    flex-shrink: 0;
+  }
+
   .pageTitle {
-    font-size: 22px;
-    margin: 0 0 12px;
+    font-size: 20px;
+    margin: 0;
     line-height: 1.3;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .pageHeader .pageTitle {
     margin-bottom: 0;
+  }
+
+  .pageTitleInline {
+    font-size: 20px;
+  }
+
+  .pageHeaderCompact {
+    margin-bottom: 16px;
   }
 
   .backLink {
@@ -1152,23 +1556,17 @@
   .panel,
   .smsStatCard,
   .summaryItem {
-    padding: 16px 18px;
+    padding: 16px;
     border-radius: 16px;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+    box-shadow: none;
   }
 
   .cardStatic {
     min-height: 0;
   }
 
-  .cardActions,
-  .cardActions .btn,
-  .buttonRow,
-  .googleActions,
-  .cartBarActions,
-  .rowActions,
-  .composeActions {
-    width: 100%;
+  .cardApplied {
+    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.2);
   }
 
   .cardActions,
@@ -1178,23 +1576,40 @@
   .composeActions {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
+    width: 100%;
   }
 
   .rowActions {
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 10px;
   }
 
   .btn,
   .rowActions .btn {
-    min-height: 52px;
+    min-height: 40px;
     height: auto;
-    padding: 14px 16px;
-    border-radius: 12px;
-    font-size: 15px;
-    width: 100%;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 14px;
     box-sizing: border-box;
+  }
+
+  .cardActions .btn,
+  .googleActions .btn,
+  .cartBarActions .btn,
+  .composeActions .btn,
+  .stickyBottomBar .btn {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .unitCardActions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .unitCardActionsWide {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .btnLink {
@@ -1207,16 +1622,16 @@
   .formSelect,
   .filterInput,
   .filterSelect {
-    min-height: 48px;
+    min-height: 44px;
     max-width: none;
     width: 100%;
     font-size: 16px;
-    padding: 12px 14px;
-    border-radius: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
   }
 
   .formTextarea {
-    min-height: 140px;
+    min-height: 120px;
     font-size: 16px;
     padding: 12px 14px;
     border-radius: 12px;
@@ -1244,6 +1659,52 @@
     width: 100%;
   }
 
+  .membersFilterRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 80px;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .membersFilterRow > * {
+    width: auto;
+  }
+
+  .membersSearchInput {
+    grid-column: 1 / 2;
+    grid-row: 1;
+    max-width: none !important;
+  }
+
+  .membersSearchBtn {
+    grid-column: 2 / 3;
+    grid-row: 1;
+    width: 80px !important;
+    min-width: 72px;
+    max-width: 88px;
+    min-height: 44px !important;
+    height: 44px !important;
+    padding: 0 10px !important;
+  }
+
+  .membersFilterSelect {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    max-width: none !important;
+  }
+
+  .memberCardList {
+    display: flex !important;
+  }
+
+  .memberCardActions .btn {
+    width: 100% !important;
+    min-height: 40px !important;
+    height: 40px !important;
+    padding: 0 12px !important;
+    font-size: 14px !important;
+  }
+
   .subNav {
     gap: 8px;
     overflow-x: auto;
@@ -1260,7 +1721,7 @@
     font-size: 14px;
   }
 
-  /* Tables → stacked cards */
+  /* Tables → stacked cards (non-members pages that still use data-label) */
   .tableWrap {
     overflow: visible;
   }
@@ -1290,7 +1751,6 @@
     border-radius: 16px;
     background: #0f172a;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
     height: auto !important;
   }
 
@@ -1359,17 +1819,43 @@
 
   .modalOverlay {
     padding: 16px;
-    align-items: flex-end;
+    align-items: center;
   }
 
   .modal,
-  .modalWide {
-    max-width: 420px;
-    width: 92%;
+  .modalWide,
+  .modalMobileSheet {
+    max-width: none;
+    width: calc(100vw - 32px);
     margin: 0 auto;
     border-radius: 16px;
-    padding: 18px;
-    max-height: min(86vh, 720px);
+    padding: 16px;
+    max-height: calc(100dvh - 32px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .modalFormScroll {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    flex: 1;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .modalFooterActions {
+    position: sticky;
+    bottom: 0;
+    padding-top: 12px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: #1e293b;
+    flex-direction: row;
+  }
+
+  .modalFooterActions .btn {
+    flex: 1;
+    width: auto;
+    min-height: 44px;
   }
 
   .cartBar {
@@ -1457,5 +1943,32 @@
   .loginPanel {
     padding: 24px 18px;
     border-radius: 16px;
+  }
+}
+
+@media (max-width: 390px) {
+  .unitCardActionsWide {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 391px) and (max-width: 768px) {
+  .membersFilterRow {
+    grid-template-columns: minmax(0, 1fr) minmax(96px, 120px) 80px;
+  }
+
+  .membersSearchInput {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .membersFilterSelect {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .membersSearchBtn {
+    grid-column: 3;
+    grid-row: 1;
   }
 }

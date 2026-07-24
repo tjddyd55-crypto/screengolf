@@ -4,6 +4,14 @@ import { FormEvent, useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import styles from "../../admin.module.css"
+import { isProtectedDisplayUnitCode } from "@/lib/display/protected-units"
+import {
+  formatCurrentAppliedSceneLabel,
+  formatSettingsUpdatedAt,
+  getDisplayModeLabel,
+} from "@/lib/display/current-applied"
+import { MonitorIcon } from "../../AdminIcons"
+import type { DisplayMode } from "@/lib/admin/constants"
 
 type DisplayUnit = {
   id: number
@@ -11,8 +19,9 @@ type DisplayUnit = {
   code: string
   sort_order: number
   is_active: boolean
-  current_mode?: string
+  current_mode?: DisplayMode | string
   current_scene?: { id: number; name: string } | null
+  settings_updated_at?: string | null
 }
 
 type UnitForm = {
@@ -21,12 +30,24 @@ type UnitForm = {
   is_active: boolean
 }
 
+function storeUrl(code: string): string {
+  if (code === "display-1") return "/store/monthly-ranking-display"
+  if (code === "display-2") return "/store/monthly-ranking-display-2"
+  return `/store/display/${encodeURIComponent(code)}`
+}
+
+function modeLabel(mode?: string): string {
+  return getDisplayModeLabel(mode)
+}
+
 export default function AdminDisplayUnitsPage() {
   const router = useRouter()
   const [units, setUnits] = useState<DisplayUnit[]>([])
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [editing, setEditing] = useState<DisplayUnit | null>(null)
+  const [deleting, setDeleting] = useState<DisplayUnit | null>(null)
+  const [deletingBusy, setDeletingBusy] = useState(false)
   const [form, setForm] = useState<UnitForm>({
     name: "",
     sort_order: "",
@@ -108,37 +129,159 @@ export default function AdminDisplayUnitsPage() {
     }
   }
 
-  async function handleDeactivate(unit: DisplayUnit) {
-    if (!window.confirm(`「${unit.name}」을(를) 비활성 처리하시겠습니까?`)) {
-      return
-    }
-
+  async function handleDeleteConfirm() {
+    if (!deleting || deletingBusy) return
+    const target = deleting
+    setDeletingBusy(true)
     setError("")
-    const res = await fetch(`/api/admin/display-units/${unit.code}`, {
-      method: "DELETE",
-    })
-    const json = (await res.json()) as { success?: boolean; error?: string }
-    if (!res.ok || !json.success) {
-      setError(json.error ?? "비활성 처리에 실패했습니다.")
-      return
+    try {
+      const res = await fetch(`/api/admin/display-units/${target.code}`, {
+        method: "DELETE",
+      })
+      const json = (await res.json()) as {
+        success?: boolean
+        error?: string
+        data?: { name?: string; code?: string }
+      }
+      if (!res.ok || !json.success) {
+        setError(json.error ?? "전광판 삭제에 실패했습니다.")
+        return
+      }
+      setUnits((prev) => prev.filter((unit) => unit.code !== target.code))
+      setMessage(`${target.name}을 삭제했습니다.`)
+      setDeleting(null)
+    } catch {
+      setError("전광판 삭제 중 오류가 발생했습니다.")
+    } finally {
+      setDeletingBusy(false)
     }
-    setMessage("전광판이 비활성 처리되었습니다.")
-    await loadUnits()
+  }
+
+  function renderUnitCard(unit: DisplayUnit) {
+    const protectedUnit = isProtectedDisplayUnitCode(unit.code)
+    const sceneLabel = formatCurrentAppliedSceneLabel({
+      sceneName: unit.current_scene?.name,
+      modeLabel: modeLabel(unit.current_mode),
+    })
+    const currentMode = modeLabel(unit.current_mode)
+    const updatedLabel = formatSettingsUpdatedAt(unit.settings_updated_at)
+    const isRemoving = deletingBusy && deleting?.code === unit.code
+
+    return (
+      <article
+        key={unit.id}
+        className={`${styles.unitCard} ${styles.cardApplied} ${
+          isRemoving ? styles.unitCardRemoving : ""
+        }`}
+      >
+        <div className={styles.unitCardTop}>
+          <div className={styles.unitTitleRow}>
+            <span className={styles.unitTitleIcon}>
+              <MonitorIcon size={18} />
+            </span>
+            <h3 className={styles.unitCardTitle}>{unit.name}</h3>
+          </div>
+          <div className={styles.buttonRow} style={{ gap: 6, flexWrap: "wrap" }}>
+            {protectedUnit ? (
+              <span className={`${styles.badge} ${styles.badgeInactive}`}>
+                기본
+              </span>
+            ) : null}
+            <span
+              className={`${styles.badge} ${
+                unit.is_active ? styles.badgeActive : styles.badgeInactive
+              }`}
+            >
+              {unit.is_active ? "사용 중" : "비활성"}
+            </span>
+          </div>
+        </div>
+        <p className={styles.liveStatus}>
+          <span className={styles.liveStatusDot} aria-hidden="true" />
+          현재 송출 중
+        </p>
+        <p className={styles.unitCardCode}>{unit.code}</p>
+        <p className={styles.appliedLabel}>현재 적용 화면</p>
+        <p className={styles.appliedSceneName}>{sceneLabel}</p>
+        <p className={styles.appliedModeLine}>{currentMode}</p>
+        {updatedLabel ? (
+          <p className={styles.appliedMetaLine}>마지막 변경 {updatedLabel}</p>
+        ) : null}
+        <div
+          className={`${styles.unitCardActions} ${
+            protectedUnit ? styles.unitCardActionsWide : ""
+          }`}
+        >
+          <Link
+            href={`/admin/display/${unit.code}`}
+            className={`${styles.btn} ${styles.btnSecondary}`}
+            aria-disabled={isRemoving}
+            tabIndex={isRemoving ? -1 : undefined}
+          >
+            설정
+          </Link>
+          <Link
+            href={`/admin/display-scenes/${unit.code}`}
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            aria-disabled={isRemoving}
+            tabIndex={isRemoving ? -1 : undefined}
+          >
+            Scene 관리
+          </Link>
+          <Link
+            href={storeUrl(unit.code)}
+            target="_blank"
+            className={`${styles.btn} ${styles.btnSecondary}`}
+            aria-disabled={isRemoving}
+            tabIndex={isRemoving ? -1 : undefined}
+          >
+            보기
+          </Link>
+          {protectedUnit ? null : (
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnDangerOutline}`}
+              disabled={isRemoving}
+              onClick={() => {
+                setDeleting(unit)
+                setError("")
+              }}
+            >
+              {isRemoving ? "삭제 중..." : "삭제"}
+            </button>
+          )}
+        </div>
+        {protectedUnit ? (
+          <p className={styles.formHint} style={{ marginTop: 10 }}>
+            기본 전광판은 삭제할 수 없습니다.
+          </p>
+        ) : null}
+      </article>
+    )
   }
 
   return (
     <>
-      <Link href="/admin" className={styles.backLink}>
+      <Link href="/admin" className={`${styles.backLink} ${styles.desktopOnly}`}>
         ← 관리자 홈
       </Link>
-      <div className={styles.pageHeader}>
-        <h2 className={styles.pageTitle}>전광판 관리</h2>
+      <div className={styles.pageHeaderCompact}>
+        <div className={styles.pageTitleWithBack}>
+          <Link
+            href="/admin"
+            className={`${styles.mobileBackBtn} ${styles.mobileOnly}`}
+            aria-label="관리자 홈으로"
+          >
+            ←
+          </Link>
+          <h2 className={styles.pageTitleInline}>전광판 관리</h2>
+        </div>
         <button
           type="button"
-          className={`${styles.btn} ${styles.btnPrimary}`}
+          className={`${styles.btn} ${styles.btnPrimary} ${styles.btnCompact}`}
           onClick={handleCreate}
         >
-          전광판 추가
+          + 전광판 추가
         </button>
       </div>
 
@@ -151,14 +294,15 @@ export default function AdminDisplayUnitsPage() {
         <div className={`${styles.message} ${styles.messageError}`}>{error}</div>
       ) : null}
 
-      <div className={`${styles.panel} ${styles.tableWrap}`}>
+      <div className={`${styles.panel} ${styles.tableWrap} ${styles.desktopOnly}`}>
         <table className={styles.table}>
           <thead>
             <tr>
               <th>이름</th>
               <th>코드</th>
               <th>정렬</th>
-              <th>현재 화면</th>
+              <th>현재 적용 화면</th>
+              <th>모드</th>
               <th>상태</th>
               <th>관리</th>
             </tr>
@@ -166,69 +310,127 @@ export default function AdminDisplayUnitsPage() {
           <tbody>
             {units.length === 0 ? (
               <tr>
-                <td colSpan={6}>등록된 전광판이 없습니다.</td>
+                <td colSpan={7}>등록된 전광판이 없습니다.</td>
               </tr>
             ) : (
-              units.map((unit) => (
-                <tr key={unit.id}>
-                  <td data-label="이름">{unit.name}</td>
-                  <td className={styles.desktopCol} data-label="코드">
-                    {unit.code}
-                  </td>
-                  <td className={styles.desktopCol} data-label="정렬">
-                    {unit.sort_order}
-                  </td>
-                  <td data-label="현재 화면">
-                    {unit.current_scene?.name ?? unit.current_mode ?? "-"}
-                  </td>
-                  <td data-label="상태">
-                    <span
-                      className={`${styles.badge} ${
-                        unit.is_active
-                          ? styles.badgeActive
-                          : styles.badgeInactive
-                      }`}
-                    >
-                      {unit.is_active ? "활성" : "비활성"}
-                    </span>
-                  </td>
-                  <td data-label="관리">
-                    <div className={styles.buttonRow}>
-                      <Link
-                        href={`/admin/display-scenes/${unit.code}`}
-                        className={`${styles.btn} ${styles.btnPrimary}`}
+              units.map((unit) => {
+                const protectedUnit = isProtectedDisplayUnitCode(unit.code)
+                const sceneLabel = formatCurrentAppliedSceneLabel({
+                  sceneName: unit.current_scene?.name,
+                  modeLabel: modeLabel(unit.current_mode),
+                })
+                const updatedLabel = formatSettingsUpdatedAt(
+                  unit.settings_updated_at,
+                )
+                const isRemoving =
+                  deletingBusy && deleting?.code === unit.code
+                return (
+                  <tr key={unit.id}>
+                    <td>
+                      <div className={styles.unitTitleRow}>
+                        <span className={styles.unitTitleIcon}>
+                          <MonitorIcon size={18} />
+                        </span>
+                        <strong>{unit.name}</strong>
+                        {protectedUnit ? (
+                          <span
+                            className={`${styles.badge} ${styles.badgeInactive}`}
+                          >
+                            기본
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className={styles.liveStatus} style={{ marginTop: 8 }}>
+                        <span
+                          className={styles.liveStatusDot}
+                          aria-hidden="true"
+                        />
+                        현재 송출 중
+                      </p>
+                    </td>
+                    <td>{unit.code}</td>
+                    <td>{unit.sort_order}</td>
+                    <td>
+                      <div className={styles.appliedLabel}>현재 적용 화면</div>
+                      <strong>{sceneLabel}</strong>
+                      {updatedLabel ? (
+                        <div className={styles.appliedMetaLine}>
+                          마지막 변경 {updatedLabel}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td>{modeLabel(unit.current_mode)}</td>
+                    <td>
+                      <span
+                        className={`${styles.badge} ${
+                          unit.is_active
+                            ? styles.badgeActive
+                            : styles.badgeInactive
+                        }`}
                       >
-                        Scene
-                      </Link>
-                      <Link
-                        href={`/admin/display/${unit.code}`}
-                        className={`${styles.btn} ${styles.btnSecondary}`}
-                      >
-                        설정
-                      </Link>
-                      <button
-                        type="button"
-                        className={`${styles.btn} ${styles.btnSecondary}`}
-                        onClick={() => openEdit(unit)}
-                      >
-                        수정
-                      </button>
-                      {unit.code !== "display-1" && unit.is_active ? (
+                        {unit.is_active ? "활성" : "비활성"}
+                      </span>
+                    </td>
+                    <td>
+                      <div className={styles.buttonRow}>
+                        <Link
+                          href={`/admin/display-scenes/${unit.code}`}
+                          className={`${styles.btn} ${styles.btnPrimary}`}
+                        >
+                          Scene
+                        </Link>
+                        <Link
+                          href={`/admin/display/${unit.code}`}
+                          className={`${styles.btn} ${styles.btnSecondary}`}
+                        >
+                          설정
+                        </Link>
                         <button
                           type="button"
-                          className={`${styles.btn} ${styles.btnDanger}`}
-                          onClick={() => handleDeactivate(unit)}
+                          className={`${styles.btn} ${styles.btnSecondary}`}
+                          disabled={isRemoving}
+                          onClick={() => openEdit(unit)}
                         >
-                          비활성
+                          수정
                         </button>
-                      ) : null}
-                    </div>
-                  </td>
-                </tr>
-              ))
+                        {protectedUnit ? (
+                          <button
+                            type="button"
+                            className={`${styles.btn} ${styles.btnSecondary}`}
+                            disabled
+                            title="기본 전광판은 삭제할 수 없습니다."
+                          >
+                            삭제
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className={`${styles.btn} ${styles.btnDangerOutline}`}
+                            disabled={isRemoving}
+                            onClick={() => {
+                              setDeleting(unit)
+                              setError("")
+                            }}
+                          >
+                            {isRemoving ? "삭제 중..." : "삭제"}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className={`${styles.unitCardList} ${styles.mobileOnly}`}>
+        {units.length === 0 ? (
+          <div className={styles.panel}>등록된 전광판이 없습니다.</div>
+        ) : (
+          units.map((unit) => renderUnitCard(unit))
+        )}
       </div>
 
       {editing ? (
@@ -256,7 +458,7 @@ export default function AdminDisplayUnitsPage() {
                   }
                 />
               </div>
-              {editing.code !== "display-1" ? (
+              {!isProtectedDisplayUnitCode(editing.code) ? (
                 <div className={styles.formGroup}>
                   <label className={styles.radioLabel}>
                     <input
@@ -286,6 +488,41 @@ export default function AdminDisplayUnitsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      ) : null}
+
+      {deleting ? (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modal}>
+            <h3 className={styles.modalTitle}>전광판을 삭제할까요?</h3>
+            <p className={styles.deleteConfirmBody}>
+              ‘{deleting.name}’과 연결된 설정 및 Scene이 삭제됩니다.
+            </p>
+            <p className={styles.deleteConfirmBody}>
+              업로드한 이미지와 공지사항은 삭제되지 않습니다.
+            </p>
+            <p className={styles.deleteConfirmWarn}>
+              삭제한 전광판은 복구할 수 없습니다.
+            </p>
+            <div className={styles.buttonRow}>
+              <button
+                type="button"
+                className={`${styles.btn} ${styles.btnSecondary}`}
+                disabled={deletingBusy}
+                onClick={() => setDeleting(null)}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                className={`${styles.btn} ${styles.btnDanger}`}
+                disabled={deletingBusy}
+                onClick={handleDeleteConfirm}
+              >
+                {deletingBusy ? "삭제 중..." : "삭제"}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

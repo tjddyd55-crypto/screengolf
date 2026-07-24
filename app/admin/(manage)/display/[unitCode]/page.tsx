@@ -8,6 +8,7 @@ import {
   type DisplayMode,
 } from "@/lib/admin/constants"
 import ScenePreviewFrame from "@/components/display/ScenePreviewFrame"
+import { isQuickSettingModeApplied } from "@/lib/display/current-applied"
 
 type DisplayAsset = {
   id: number
@@ -356,6 +357,11 @@ export default function AdminDisplayPage({ params }: PageProps) {
   const currentModeLabel = settings
     ? DISPLAY_MODE_LABELS[settings.mode]
     : "랭킹 화면"
+  const appliedMode = settings?.mode ?? null
+  const rankingApplied = isQuickSettingModeApplied(appliedMode, "ranking")
+  const fullApplied = isQuickSettingModeApplied(appliedMode, "media_full")
+  const splitApplied = isQuickSettingModeApplied(appliedMode, "media_split")
+  const noticeApplied = isQuickSettingModeApplied(appliedMode, "notice")
 
   const canApplyFull = isUsableAsset(fullAsset)
   const canApplySplit = isUsableAsset(leftAsset) && isUsableAsset(rightAsset)
@@ -377,11 +383,18 @@ export default function AdminDisplayPage({ params }: PageProps) {
         </Link>
       </div>
 
-      <div className={`${styles.panel} ${styles.infoPanel}`}>
-        <div style={{ marginBottom: 8 }}>
-          <strong>현재 전광판 화면:</strong>{" "}
+      <div
+        className={`${styles.panel} ${styles.infoPanel} ${styles.currentAppliedBanner} ${styles.cardApplied}`}
+      >
+        <p className={styles.liveStatus}>
+          <span className={styles.liveStatusDot} aria-hidden="true" />
+          현재 송출 중
+        </p>
+        <p className={styles.appliedLabel}>현재 적용 화면</p>
+        <p className={styles.appliedSceneName}>
           {currentSceneLabel ?? currentModeLabel}
-        </div>
+        </p>
+        <p className={styles.appliedModeLine}>{currentModeLabel}</p>
         <Link href={scenesHref} className={styles.btnLink}>
           Scene 관리로 이동 →
         </Link>
@@ -395,8 +408,22 @@ export default function AdminDisplayPage({ params }: PageProps) {
       ) : null}
 
       <div className={styles.displayGrid}>
-        <div className={`${styles.card} ${styles.cardStatic}`}>
-          <h3 className={styles.cardTitle}>랭킹 화면</h3>
+        <div
+          className={`${styles.card} ${styles.cardStatic} ${
+            rankingApplied ? styles.cardApplied : ""
+          }`}
+        >
+          <div className={styles.cardHeader}>
+            <h3 className={styles.cardTitle}>랭킹 화면</h3>
+            {rankingApplied ? (
+              <span className={`${styles.badge} ${styles.badgeApplied}`}>
+                현재 적용 중
+              </span>
+            ) : null}
+          </div>
+          {rankingApplied ? (
+            <p className={styles.modeCheckMark}>✓ 현재 적용 중</p>
+          ) : null}
           <p className={styles.cardDesc}>기존 월간 랭킹 전광판을 표시합니다.</p>
           <div className={styles.cardPreview}>
             <ScenePreviewFrame mode="ranking" />
@@ -405,16 +432,30 @@ export default function AdminDisplayPage({ params }: PageProps) {
             <button
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
-              disabled={applying}
+              disabled={applying || rankingApplied}
               onClick={handleApplyRanking}
             >
-              적용
+              {rankingApplied ? "적용 중" : "적용"}
             </button>
           </div>
         </div>
 
-        <div className={`${styles.card} ${styles.cardStatic}`}>
-          <h3 className={styles.cardTitle}>가로 전체 화면</h3>
+        <div
+          className={`${styles.card} ${styles.cardStatic} ${
+            fullApplied ? styles.cardApplied : ""
+          }`}
+        >
+          <div className={styles.cardHeader}>
+            <h3 className={styles.cardTitle}>가로 전체 화면</h3>
+            {fullApplied ? (
+              <span className={`${styles.badge} ${styles.badgeApplied}`}>
+                현재 적용 중
+              </span>
+            ) : null}
+          </div>
+          {fullApplied ? (
+            <p className={styles.modeCheckMark}>✓ 현재 적용 중</p>
+          ) : null}
           <p className={styles.cardDesc}>
             이미지 또는 PDF 1개를 전체 화면에 표시합니다.
           </p>
@@ -444,16 +485,30 @@ export default function AdminDisplayPage({ params }: PageProps) {
             <button
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
-              disabled={applying || !canApplyFull}
+              disabled={applying || !canApplyFull || fullApplied}
               onClick={handleApplyMediaFull}
             >
-              적용
+              {fullApplied ? "적용 중" : "적용"}
             </button>
           </div>
         </div>
 
-        <div className={`${styles.card} ${styles.cardStatic}`}>
-          <h3 className={styles.cardTitle}>세로 2분할 화면</h3>
+        <div
+          className={`${styles.card} ${styles.cardStatic} ${
+            splitApplied ? styles.cardApplied : ""
+          }`}
+        >
+          <div className={styles.cardHeader}>
+            <h3 className={styles.cardTitle}>세로 2분할 화면</h3>
+            {splitApplied ? (
+              <span className={`${styles.badge} ${styles.badgeApplied}`}>
+                현재 적용 중
+              </span>
+            ) : null}
+          </div>
+          {splitApplied ? (
+            <p className={styles.modeCheckMark}>✓ 현재 적용 중</p>
+          ) : null}
           <p className={styles.cardDesc}>
             왼쪽/오른쪽에 각각 이미지 또는 PDF를 표시합니다.
           </p>
@@ -500,16 +555,30 @@ export default function AdminDisplayPage({ params }: PageProps) {
             <button
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
-              disabled={applying || !canApplySplit}
+              disabled={applying || !canApplySplit || splitApplied}
               onClick={handleApplyMediaSplit}
             >
-              적용
+              {splitApplied ? "적용 중" : "적용"}
             </button>
           </div>
         </div>
 
-        <div className={`${styles.card} ${styles.cardStatic}`}>
-          <h3 className={styles.cardTitle}>공지사항</h3>
+        <div
+          className={`${styles.card} ${styles.cardStatic} ${
+            noticeApplied ? styles.cardApplied : ""
+          }`}
+        >
+          <div className={styles.cardHeader}>
+            <h3 className={styles.cardTitle}>공지사항</h3>
+            {noticeApplied ? (
+              <span className={`${styles.badge} ${styles.badgeApplied}`}>
+                현재 적용 중
+              </span>
+            ) : null}
+          </div>
+          {noticeApplied ? (
+            <p className={styles.modeCheckMark}>✓ 현재 적용 중</p>
+          ) : null}
           <p className={styles.cardDesc}>텍스트 공지 화면을 표시합니다.</p>
           <div className={styles.formGroup}>
             <select
@@ -541,10 +610,10 @@ export default function AdminDisplayPage({ params }: PageProps) {
             <button
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
-              disabled={applying}
+              disabled={applying || noticeApplied}
               onClick={handleApplyNotice}
             >
-              적용
+              {noticeApplied ? "적용 중" : "적용"}
             </button>
           </div>
         </div>
