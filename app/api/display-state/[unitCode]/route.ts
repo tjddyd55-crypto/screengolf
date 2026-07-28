@@ -2,11 +2,25 @@ import { NextResponse } from "next/server"
 import { getDisplaySettings } from "@/lib/db/display-settings"
 import { getDisplayUnitByCode } from "@/lib/db/display-units"
 import { resolveDisplayState } from "@/lib/display/resolve-display-state"
+import type { DisplayStatePayload } from "@/lib/display/types"
 
 export const dynamic = "force-dynamic"
 
 type RouteContext = {
   params: Promise<{ unitCode: string }>
+}
+
+function withBroadcastMeta(state: DisplayStatePayload) {
+  if (state.mode === "off") {
+    return {
+      broadcastStatus: state.broadcastStatus,
+      hasRenderableContent: state.hasRenderableContent,
+    }
+  }
+  return {
+    broadcastStatus: state.broadcastStatus ?? ("BROADCASTING" as const),
+    hasRenderableContent: state.hasRenderableContent ?? true,
+  }
 }
 
 export async function GET(_request: Request, context: RouteContext) {
@@ -45,6 +59,7 @@ export async function GET(_request: Request, context: RouteContext) {
       },
       updatedAt,
       ...state,
+      ...withBroadcastMeta(state),
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : ""

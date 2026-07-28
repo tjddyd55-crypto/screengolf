@@ -5,6 +5,10 @@ import {
   updateDisplaySettings,
 } from "@/lib/db/display-settings"
 import { getDisplayUnitByCode } from "@/lib/db/display-units"
+import {
+  getUnitBroadcastState,
+  toAdminBroadcastFields,
+} from "@/lib/display/resolve-broadcast-state"
 
 export const dynamic = "force-dynamic"
 
@@ -14,6 +18,14 @@ type RouteContext = {
 
 function isDisplayMode(value: string): value is DisplayMode {
   return DISPLAY_MODES.includes(value as DisplayMode)
+}
+
+function settingsWithBroadcast(unitId: number) {
+  const settings = getDisplaySettingsView(unitId)
+  return {
+    ...settings,
+    ...toAdminBroadcastFields(getUnitBroadcastState(unitId)),
+  }
 }
 
 export async function GET(_request: Request, context: RouteContext) {
@@ -29,7 +41,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
     return NextResponse.json({
       success: true,
-      data: getDisplaySettingsView(unit.id),
+      data: settingsWithBroadcast(unit.id),
     })
   } catch (error) {
     console.error("[admin/display-units/settings] GET failed:", error)
@@ -80,7 +92,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     return NextResponse.json({
       success: true,
-      data: getDisplaySettingsView(unit.id),
+      data: settingsWithBroadcast(unit.id),
     })
   } catch (error) {
     console.error("[admin/display-units/settings] PATCH failed:", error)

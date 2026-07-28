@@ -6,7 +6,7 @@ import {
 } from "@/lib/admin/constants"
 import { getDisplayAssetById } from "./display-assets"
 import { getNoticeById } from "./display-notices"
-import { getDisplaySettings } from "./display-settings"
+import { getDisplaySettings, clearCurrentAppliedScene } from "./display-settings"
 import {
   DEFAULT_DISPLAY_UNIT_CODE,
   resolveUnitId,
@@ -255,45 +255,60 @@ export function updateDisplayScene(
 
   validateSceneConfig(next)
 
-  getDb()
-    .prepare(
-      `UPDATE display_scenes
-       SET name = ?, mode = ?, notice_id = ?, media_full_file_id = ?,
-           media_left_file_id = ?, media_right_file_id = ?, sort_order = ?,
-           is_active = ?, updated_at = datetime('now')
-       WHERE id = ?`,
-    )
-    .run(
-      input.name ?? current.name,
-      next.mode,
-      next.notice_id,
-      next.media_full_file_id,
-      next.media_left_file_id,
-      next.media_right_file_id,
-      input.sort_order ?? current.sort_order,
-      (input.is_active ?? current.is_active) ? 1 : 0,
-      id,
-    )
+  const update = getDb().transaction(() => {
+    getDb()
+      .prepare(
+        `UPDATE display_scenes
+         SET name = ?, mode = ?, notice_id = ?, media_full_file_id = ?,
+             media_left_file_id = ?, media_right_file_id = ?, sort_order = ?,
+             is_active = ?, updated_at = datetime('now')
+         WHERE id = ?`,
+      )
+      .run(
+        input.name ?? current.name,
+        next.mode,
+        next.notice_id,
+        next.media_full_file_id,
+        next.media_left_file_id,
+        next.media_right_file_id,
+        input.sort_order ?? current.sort_order,
+        (input.is_active ?? current.is_active) ? 1 : 0,
+        id,
+      )
 
-  return getDisplaySceneById(id)
+    if (input.is_active === false) {
+      const settings = getDisplaySettings(current.display_unit_id)
+      if (settings.current_scene_id === id) {
+        clearCurrentAppliedScene(current.display_unit_id)
+      }
+    }
+
+    return getDisplaySceneById(id)
+  })
+
+  return update()
 }
 
 export function deactivateDisplayScene(id: number): boolean {
   const scene = getDisplaySceneById(id)
   if (!scene) return false
 
-  const settings = getDisplaySettings(scene.display_unit_id)
-  if (settings.current_scene_id === id) {
-    throw new Error("현재 적용 중인 화면은 삭제할 수 없습니다.")
-  }
+  const deactivate = getDb().transaction(() => {
+    const settings = getDisplaySettings(scene.display_unit_id)
+    if (settings.current_scene_id === id) {
+      clearCurrentAppliedScene(scene.display_unit_id)
+    }
 
-  const result = getDb()
-    .prepare(
-      "UPDATE display_scenes SET is_active = 0, updated_at = datetime('now') WHERE id = ?",
-    )
-    .run(id)
+    const result = getDb()
+      .prepare(
+        "UPDATE display_scenes SET is_active = 0, updated_at = datetime('now') WHERE id = ?",
+      )
+      .run(id)
 
-  return result.changes > 0
+    return result.changes > 0
+  })
+
+  return deactivate()
 }
 
 export function duplicateDisplayScene(id: number): DisplayScene | null {

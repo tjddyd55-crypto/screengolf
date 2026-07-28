@@ -338,23 +338,8 @@ function ensureUnitSettingsAndScenes(
     return
   }
 
-  if (rankingSceneId) {
-    const current = database
-      .prepare(
-        "SELECT current_scene_id FROM display_settings WHERE display_unit_id = ?",
-      )
-      .get(unitId) as { current_scene_id: number | null }
-
-    if (!current.current_scene_id) {
-      database
-        .prepare(
-          `UPDATE display_settings
-           SET current_scene_id = ?, updated_at = datetime('now')
-           WHERE display_unit_id = ?`,
-        )
-        .run(rankingSceneId, unitId)
-    }
-  }
+  // 기존 settings의 current_scene_id가 null이어도 자동으로 ranking Scene을
+  // 다시 채우지 않는다. (Scene 정리 후 WAITING 상태를 유지하기 위함)
 }
 
 function migrateDisplayUnitsIfNeeded(database: Database.Database): void {

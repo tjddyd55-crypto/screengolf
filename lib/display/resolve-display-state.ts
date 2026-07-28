@@ -1,12 +1,16 @@
 import type { DisplayMode } from "@/lib/admin/constants"
 import { getDisplayAssetById, toPublicMedia } from "@/lib/db/display-assets"
 import { getNoticeById } from "@/lib/db/display-notices"
-import { getDisplaySettings } from "@/lib/db/display-settings"
+import {
+  clearCurrentAppliedScene,
+  getDisplaySettings,
+} from "@/lib/db/display-settings"
 import { getDisplaySceneById } from "@/lib/db/display-scenes"
 import {
   DEFAULT_DISPLAY_UNIT_CODE,
   getDisplayUnitByCode,
 } from "@/lib/db/display-units"
+import { getUnitBroadcastState } from "@/lib/display/resolve-broadcast-state"
 import type { DisplaySceneRef, DisplayStatePayload } from "@/lib/display/types"
 
 export type DisplaySource = {
@@ -19,7 +23,21 @@ export type DisplaySource = {
 }
 
 function buildRankingState(scene?: DisplaySceneRef): DisplayStatePayload {
-  return scene ? { mode: "ranking", scene } : { mode: "ranking" }
+  return {
+    mode: "ranking",
+    scene,
+    broadcastStatus: "BROADCASTING",
+    hasRenderableContent: true,
+  }
+}
+
+function buildWaitingState(): DisplayStatePayload {
+  return {
+    mode: "off",
+    broadcastStatus: "WAITING",
+    hasRenderableContent: false,
+    scene: null,
+  }
 }
 
 function resolveFromSource(source: DisplaySource): DisplayStatePayload | null {
@@ -37,6 +55,8 @@ function resolveFromSource(source: DisplaySource): DisplayStatePayload | null {
           body: notice.body,
           theme: notice.theme,
         },
+        broadcastStatus: "BROADCASTING",
+        hasRenderableContent: true,
       }
     }
     return null
@@ -49,6 +69,8 @@ function resolveFromSource(source: DisplaySource): DisplayStatePayload | null {
         mode: "media_full",
         scene,
         media: toPublicMedia(asset),
+        broadcastStatus: "BROADCASTING",
+        hasRenderableContent: true,
       }
     }
     return null
@@ -67,6 +89,8 @@ function resolveFromSource(source: DisplaySource): DisplayStatePayload | null {
         scene,
         left: toPublicMedia(left),
         right: toPublicMedia(right),
+        broadcastStatus: "BROADCASTING",
+        hasRenderableContent: true,
       }
     }
     return null
@@ -79,6 +103,13 @@ function resolveFromSource(source: DisplaySource): DisplayStatePayload | null {
   return null
 }
 
+function healInvalidCurrentScene(unitId: number, currentSceneId: number): void {
+  const scene = getDisplaySceneById(currentSceneId)
+  if (!scene || !scene.is_active || scene.display_unit_id !== unitId) {
+    clearCurrentAppliedScene(unitId)
+  }
+}
+
 /** unitCode 생략 시 display-1 (기존 /api/display-state 호환) */
 export function resolveDisplayState(unitCode?: string): DisplayStatePayload {
   const explicitCode = unitCode?.trim()
@@ -89,17 +120,25 @@ export function resolveDisplayState(unitCode?: string): DisplayStatePayload {
     if (explicitCode) {
       throw new Error("UNIT_NOT_FOUND")
     }
-    return buildRankingState()
-  }
-
-  if (!unit.is_active) {
-    return buildRankingState()
+    return buildWaitingState()
   }
 
   const settings = getDisplaySettings(unit.id)
 
   if (settings.current_scene_id) {
-    const scene = getDisplaySceneById(settings.current_scene_id)
+    healInvalidCurrentScene(unit.id, settings.current_scene_id)
+  }
+
+  const broadcast = getUnitBroadcastState(unit.id)
+
+  if (broadcast.status === "WAITING") {
+    return buildWaitingState()
+  }
+
+  const fresh = getDisplaySettings(unit.id)
+
+  if (fresh.current_scene_id) {
+    const scene = getDisplaySceneById(fresh.current_scene_id)
     if (scene && scene.is_active && scene.display_unit_id === unit.id) {
       const resolved = resolveFromSource({
         mode: scene.mode,
@@ -113,13 +152,15 @@ export function resolveDisplayState(unitCode?: string): DisplayStatePayload {
     }
   }
 
-  const fallback = resolveFromSource({
-    mode: settings.mode,
-    notice_id: settings.active_notice_id,
-    media_full_file_id: settings.media_full_file_id,
-    media_left_file_id: settings.media_left_file_id,
-    media_right_file_id: settings.media_right_file_id,
+  const direct = resolveFromSource({
+    mode: fresh.mode,
+    notice_id: fresh.active_notice_id,
+    media_full_file_id: fresh.media_full_file_id,
+    media_left_file_id: fresh.media_left_file_id,
+    media_right_file_id: fresh.media_right_file_id,
   })
 
-  return fallback ?? buildRankingState()
+  if (direct) return direct
+
+  return buildWaitingState()
 }

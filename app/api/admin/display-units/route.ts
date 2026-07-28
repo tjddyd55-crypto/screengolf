@@ -4,6 +4,14 @@ import {
   listDisplayUnits,
 } from "@/lib/db/display-units"
 import { getDisplaySettingsView } from "@/lib/db/display-settings"
+import {
+  getUnitBroadcastState,
+  toAdminBroadcastFields,
+} from "@/lib/display/resolve-broadcast-state"
+import type {
+  DisplayBroadcastReason,
+  DisplayBroadcastStatus,
+} from "@/lib/display/broadcast-state"
 
 export const dynamic = "force-dynamic"
 
@@ -17,11 +25,35 @@ export async function GET() {
       } catch {
         settings = null
       }
+
+      let broadcastFields: {
+        broadcast_status: DisplayBroadcastStatus
+        has_renderable_content: boolean
+        broadcast_reason: DisplayBroadcastReason
+        broadcast_label: string
+        current_scene_name: string | null
+        mode_label: string | null
+      } = {
+        broadcast_status: "WAITING",
+        has_renderable_content: false,
+        broadcast_reason: "NO_ACTIVE_CONTENT",
+        broadcast_label: "적용된 화면 없음",
+        current_scene_name: null,
+        mode_label: null,
+      }
+
+      try {
+        broadcastFields = toAdminBroadcastFields(getUnitBroadcastState(unit.id))
+      } catch {
+        // settings 없으면 WAITING 기본값 유지
+      }
+
       return {
         ...unit,
         current_mode: settings?.mode ?? "ranking",
         current_scene: settings?.current_scene ?? null,
         settings_updated_at: settings?.updated_at ?? null,
+        ...broadcastFields,
       }
     })
 

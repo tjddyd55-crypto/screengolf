@@ -8,8 +8,11 @@ import { type DisplayMode } from "@/lib/admin/constants"
 import {
   formatCurrentAppliedSceneLabel,
   formatSettingsUpdatedAt,
-  getDisplayModeLabel,
 } from "@/lib/display/current-applied"
+import {
+  getBroadcastStatusHint,
+  type DisplayBroadcastStatus,
+} from "@/lib/display/broadcast-state"
 import { MonitorIcon } from "../AdminIcons"
 
 type DisplayUnitCard = {
@@ -21,12 +24,27 @@ type DisplayUnitCard = {
   current_mode: DisplayMode
   current_scene: { id: number; name: string } | null
   settings_updated_at?: string | null
+  broadcast_status?: DisplayBroadcastStatus
+  has_renderable_content?: boolean
+  broadcast_label?: string
+  current_scene_name?: string | null
+  mode_label?: string | null
 }
 
 function storeUrl(code: string): string {
   if (code === "display-1") return "/store/monthly-ranking-display"
   if (code === "display-2") return "/store/monthly-ranking-display-2"
   return `/store/display/${encodeURIComponent(code)}`
+}
+
+function cardStatusClass(status: DisplayBroadcastStatus | undefined): string {
+  if (status === "BROADCASTING") return styles.displayUnitCardBroadcasting
+  return styles.displayUnitCardWaiting
+}
+
+function liveStatusClass(status: DisplayBroadcastStatus | undefined): string {
+  if (status === "BROADCASTING") return styles.liveStatus
+  return `${styles.liveStatus} ${styles.liveStatusWaiting}`
 }
 
 export default function AdminHomePage() {
@@ -115,18 +133,29 @@ export default function AdminHomePage() {
       <h3 className={styles.sectionTitle}>전광판 관리</h3>
       <div className={styles.homeGrid}>
         {units.map((unit) => {
-          const modeLabel = getDisplayModeLabel(unit.current_mode)
-          const sceneLabel = formatCurrentAppliedSceneLabel({
-            sceneName: unit.current_scene?.name,
-            modeLabel,
-          })
+          const status = unit.broadcast_status ?? "WAITING"
+          const modeLabel =
+            unit.mode_label ??
+            formatCurrentAppliedSceneLabel({
+              sceneName: null,
+              modeLabel: unit.current_mode,
+            })
+          const sceneLabel =
+            status === "WAITING"
+              ? "적용된 화면 없음"
+              : formatCurrentAppliedSceneLabel({
+                  sceneName:
+                    unit.current_scene_name ?? unit.current_scene?.name,
+                  modeLabel,
+                })
           const updatedLabel = formatSettingsUpdatedAt(
             unit.settings_updated_at,
           )
+
           return (
             <div
               key={unit.id}
-              className={`${styles.card} ${styles.cardStatic} ${styles.cardApplied}`}
+              className={`${styles.card} ${styles.cardStatic} ${cardStatusClass(status)}`}
             >
               <div className={styles.cardHeader}>
                 <div className={styles.unitTitleRow}>
@@ -136,13 +165,24 @@ export default function AdminHomePage() {
                   <h3 className={styles.cardTitle}>{unit.name}</h3>
                 </div>
               </div>
-              <p className={styles.liveStatus}>
+              <p className={liveStatusClass(status)}>
                 <span className={styles.liveStatusDot} aria-hidden="true" />
-                현재 송출 중
+                {unit.broadcast_label ??
+                  (status === "BROADCASTING"
+                    ? "현재 송출 중"
+                    : "적용된 화면 없음")}
               </p>
-              <p className={styles.appliedLabel}>현재 적용 화면</p>
-              <p className={styles.appliedSceneName}>{sceneLabel}</p>
-              <p className={styles.appliedModeLine}>{modeLabel}</p>
+              {status === "WAITING" ? (
+                <p className={styles.appliedMetaLine}>
+                  {getBroadcastStatusHint("WAITING")}
+                </p>
+              ) : (
+                <>
+                  <p className={styles.appliedLabel}>현재 적용 화면</p>
+                  <p className={styles.appliedSceneName}>{sceneLabel}</p>
+                  <p className={styles.appliedModeLine}>{modeLabel}</p>
+                </>
+              )}
               {updatedLabel ? (
                 <p className={styles.appliedMetaLine}>
                   마지막 변경 {updatedLabel}
@@ -152,7 +192,7 @@ export default function AdminHomePage() {
               <div className={styles.cardActions}>
                 <Link
                   href={`/admin/display/${unit.code}`}
-                  className={`${styles.btn} ${styles.btnPrimary}`}
+                  className={`${styles.btn} ${styles.btnSecondary}`}
                 >
                   빠른 설정
                 </Link>
@@ -203,7 +243,9 @@ export default function AdminHomePage() {
         </Link>
         <Link href="/admin/plan-types" className={styles.card}>
           <h3 className={styles.cardTitle}>요금제 관리</h3>
-          <p className={styles.cardDesc}>회원 요금제 마스터를 등록·수정합니다.</p>
+          <p className={styles.cardDesc}>
+            회원 요금제 마스터를 등록·수정합니다.
+          </p>
         </Link>
       </div>
     </>

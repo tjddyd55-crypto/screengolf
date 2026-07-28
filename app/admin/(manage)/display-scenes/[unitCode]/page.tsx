@@ -8,6 +8,11 @@ import {
   type DisplayMode,
 } from "@/lib/admin/constants"
 import ScenePreviewFrame from "@/components/display/ScenePreviewFrame"
+import {
+  getBroadcastStatusHint,
+  getBroadcastStatusLabel,
+  type DisplayBroadcastStatus,
+} from "@/lib/display/broadcast-state"
 
 type DisplayAsset = {
   id: number
@@ -153,29 +158,56 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(true)
+  const [broadcastStatus, setBroadcastStatus] =
+    useState<DisplayBroadcastStatus>("WAITING")
+  const [broadcastLabel, setBroadcastLabel] = useState("적용된 화면 없음")
+  const [broadcastSceneName, setBroadcastSceneName] = useState<string | null>(
+    null,
+  )
+  const [broadcastModeLabel, setBroadcastModeLabel] = useState<string | null>(
+    null,
+  )
+
+  const settingsApi = `/api/admin/display-units/${encodeURIComponent(unitCode)}/settings`
 
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [scenesRes, assetsRes, noticesRes] = await Promise.all([
+      const [scenesRes, assetsRes, noticesRes, settingsRes] = await Promise.all([
         fetch(scenesApi),
         fetch("/api/admin/display-assets"),
         fetch("/api/admin/notices"),
+        fetch(settingsApi),
       ])
 
       const scenesJson = (await scenesRes.json()) as { data?: DisplayScene[] }
       const assetsJson = (await assetsRes.json()) as { data?: DisplayAsset[] }
       const noticesJson = (await noticesRes.json()) as { data?: NoticeOption[] }
+      const settingsJson = (await settingsRes.json()) as {
+        data?: {
+          broadcast_status?: DisplayBroadcastStatus
+          broadcast_label?: string
+          current_scene_name?: string | null
+          mode_label?: string | null
+        }
+      }
 
       setScenes(scenesJson.data ?? [])
       setAssets(assetsJson.data ?? [])
       setNotices(noticesJson.data ?? [])
+      const status = settingsJson.data?.broadcast_status ?? "WAITING"
+      setBroadcastStatus(status)
+      setBroadcastLabel(
+        settingsJson.data?.broadcast_label ?? getBroadcastStatusLabel(status),
+      )
+      setBroadcastSceneName(settingsJson.data?.current_scene_name ?? null)
+      setBroadcastModeLabel(settingsJson.data?.mode_label ?? null)
     } catch {
       setError("Scene 목록을 불러오지 못했습니다.")
     } finally {
       setLoading(false)
     }
-  }, [scenesApi])
+  }, [scenesApi, settingsApi])
 
   useEffect(() => {
     loadData()
@@ -382,6 +414,20 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
   const activeScenes = scenes.filter((scene) => scene.is_active)
   const currentScene = activeScenes.find((scene) => scene.is_current)
 
+  const bannerClass =
+    broadcastStatus === "BROADCASTING"
+      ? styles.displayUnitCardBroadcasting
+      : styles.displayUnitCardWaiting
+  const liveClass =
+    broadcastStatus === "BROADCASTING"
+      ? styles.liveStatus
+      : `${styles.liveStatus} ${styles.liveStatusWaiting}`
+  const appliedSceneDisplayName =
+    broadcastSceneName ??
+    currentScene?.name ??
+    broadcastModeLabel ??
+    "—"
+
   return (
     <>
       <Link href="/admin" className={styles.backLink}>
@@ -407,21 +453,31 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
         </div>
       </div>
 
-      {currentScene ? (
-        <div
-          className={`${styles.panel} ${styles.currentAppliedBanner} ${styles.cardApplied}`}
-        >
-          <p className={styles.liveStatus}>
-            <span className={styles.liveStatusDot} aria-hidden="true" />
-            현재 송출 중
+      <div
+        className={`${styles.panel} ${styles.currentAppliedBanner} ${styles.broadcastBanner} ${bannerClass}`}
+      >
+        <p className={liveClass}>
+          <span className={styles.liveStatusDot} aria-hidden="true" />
+          {broadcastLabel}
+        </p>
+        <p className={styles.appliedSceneName}>
+          {broadcastStatus === "BROADCASTING"
+            ? `현재 적용 화면: ${appliedSceneDisplayName}`
+            : "현재 적용된 Scene이 없습니다."}
+        </p>
+        {broadcastStatus === "WAITING" ? (
+          <p className={styles.appliedMetaLine}>
+            {getBroadcastStatusHint(broadcastStatus)}
           </p>
-          <p className={styles.appliedLabel}>현재 적용 화면</p>
-          <p className={styles.appliedSceneName}>{currentScene.name}</p>
+        ) : broadcastModeLabel || currentScene ? (
           <p className={styles.appliedModeLine}>
-            {DISPLAY_MODE_LABELS[currentScene.mode]}
+            {broadcastModeLabel ??
+              (currentScene
+                ? DISPLAY_MODE_LABELS[currentScene.mode]
+                : null)}
           </p>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
       {message ? (
         <div className={`${styles.message} ${styles.messageSuccess}`}>{message}</div>
@@ -431,7 +487,12 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
       ) : null}
 
       {activeScenes.length === 0 ? (
-        <div className={styles.panel}>등록된 Scene이 없습니다.</div>
+        <div className={styles.panel}>
+          <p>
+            등록된 Scene이 없습니다. Scene을 생성하거나 빠른 설정에서 화면을
+            선택하세요.
+          </p>
+        </div>
       ) : (
         <div className={styles.sceneGrid}>
           {activeScenes.map((scene) => {
@@ -510,15 +571,13 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
                     >
                       복제
                     </button>
-                    {!scene.is_current ? (
-                      <button
-                        type="button"
-                        className={`${styles.btn} ${styles.btnDanger}`}
-                        onClick={() => handleDeactivate(scene.id)}
-                      >
-                        비활성
-                      </button>
-                    ) : null}
+                    <button
+                      type="button"
+                      className={`${styles.btn} ${styles.btnDanger}`}
+                      onClick={() => handleDeactivate(scene.id)}
+                    >
+                      비활성
+                    </button>
                   </div>
                 </div>
               </div>

@@ -1,4 +1,5 @@
 import type { DisplayMode } from "@/lib/admin/constants"
+import type { DisplayBroadcastStatus } from "@/lib/display/broadcast-state"
 
 export type DisplaySceneRef = {
   id: number
@@ -14,30 +15,6 @@ export type DisplayMediaPayload = {
   mimeType: string
   fileMissing?: boolean
 }
-
-export type DisplayStatePayload =
-  | { mode: "ranking"; scene?: DisplaySceneRef }
-  | {
-      mode: "notice"
-      scene?: DisplaySceneRef
-      notice: {
-        id: number
-        title: string
-        body: string
-        theme: string
-      }
-    }
-  | {
-      mode: "media_full"
-      scene?: DisplaySceneRef
-      media: DisplayMediaPayload
-    }
-  | {
-      mode: "media_split"
-      scene?: DisplaySceneRef
-      left: DisplayMediaPayload
-      right: DisplayMediaPayload
-    }
 
 export type DisplaySettingsView = {
   id: number
@@ -56,6 +33,41 @@ export type DisplaySettingsView = {
   media_left_asset: import("@/lib/db/display-assets").DisplayAsset | null
   media_right_asset: import("@/lib/db/display-assets").DisplayAsset | null
 }
+
+type BroadcastMeta = {
+  broadcastStatus?: DisplayBroadcastStatus
+  hasRenderableContent?: boolean
+}
+
+export type DisplayStatePayload =
+  | {
+      mode: "off"
+      broadcastStatus: "WAITING"
+      hasRenderableContent: false
+      scene?: null
+    }
+  | ({ mode: "ranking"; scene?: DisplaySceneRef } & BroadcastMeta)
+  | ({
+      mode: "notice"
+      scene?: DisplaySceneRef
+      notice: {
+        id: number
+        title: string
+        body: string
+        theme: string
+      }
+    } & BroadcastMeta)
+  | ({
+      mode: "media_full"
+      scene?: DisplaySceneRef
+      media: DisplayMediaPayload
+    } & BroadcastMeta)
+  | ({
+      mode: "media_split"
+      scene?: DisplaySceneRef
+      left: DisplayMediaPayload
+      right: DisplayMediaPayload
+    } & BroadcastMeta)
 
 export type DisplaySceneView = {
   id: number

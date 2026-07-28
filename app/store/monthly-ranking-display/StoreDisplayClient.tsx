@@ -32,6 +32,8 @@ type CurrentMonthResponse = {
 
 type DisplayStateResponse = DisplayStatePayload & {
   success: boolean
+  broadcastStatus?: "BROADCASTING" | "WAITING"
+  hasRenderableContent?: boolean
 }
 
 const TOP_CARD_COLORS = ["#FFD700", "#C0C0C0", "#CD7F32", "#3b82f6", "#22c55e"]
@@ -138,6 +140,31 @@ export default function StoreDisplayClient({
     const id = window.setInterval(fetchRankingData, 30000)
     return () => window.clearInterval(id)
   }, [displayState.mode, fetchRankingData])
+
+  if (
+    displayState.mode === "off" ||
+    displayState.broadcastStatus === "WAITING"
+  ) {
+    return (
+      <div
+        style={{
+          width: "100vw",
+          height: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#0b1220",
+          color: "#94a3b8",
+          fontFamily: "Pretendard, sans-serif",
+          fontSize: 28,
+          fontWeight: 600,
+          letterSpacing: "0.02em",
+        }}
+      >
+        적용된 화면이 없습니다.
+      </div>
+    )
+  }
 
   if (displayState.mode === "notice" && "notice" in displayState) {
     return (

@@ -9,6 +9,11 @@ import {
 } from "@/lib/admin/constants"
 import ScenePreviewFrame from "@/components/display/ScenePreviewFrame"
 import { isQuickSettingModeApplied } from "@/lib/display/current-applied"
+import {
+  getBroadcastStatusHint,
+  getBroadcastStatusLabel,
+  type DisplayBroadcastStatus,
+} from "@/lib/display/broadcast-state"
 
 type DisplayAsset = {
   id: number
@@ -40,6 +45,12 @@ type DisplaySettings = {
   media_full_asset: DisplayAsset | null
   media_left_asset: DisplayAsset | null
   media_right_asset: DisplayAsset | null
+  broadcast_status?: DisplayBroadcastStatus
+  has_renderable_content?: boolean
+  broadcast_label?: string
+  current_scene_name?: string | null
+  mode_label?: string | null
+  updated_at?: string | null
 }
 
 type NoticeOption = {
@@ -353,10 +364,13 @@ export default function AdminDisplayPage({ params }: PageProps) {
     return <p>불러오는 중...</p>
   }
 
-  const currentSceneLabel = settings?.current_scene?.name
-  const currentModeLabel = settings
-    ? DISPLAY_MODE_LABELS[settings.mode]
-    : "랭킹 화면"
+  const broadcastStatus = settings?.broadcast_status ?? "WAITING"
+  const isBroadcasting = broadcastStatus === "BROADCASTING"
+  const currentSceneLabel =
+    settings?.current_scene_name ?? settings?.current_scene?.name
+  const currentModeLabel =
+    settings?.mode_label ??
+    (settings ? DISPLAY_MODE_LABELS[settings.mode] : "랭킹 화면")
   const appliedMode = settings?.mode ?? null
   const rankingApplied = isQuickSettingModeApplied(appliedMode, "ranking")
   const fullApplied = isQuickSettingModeApplied(appliedMode, "media_full")
@@ -365,6 +379,13 @@ export default function AdminDisplayPage({ params }: PageProps) {
 
   const canApplyFull = isUsableAsset(fullAsset)
   const canApplySplit = isUsableAsset(leftAsset) && isUsableAsset(rightAsset)
+
+  const bannerClass = isBroadcasting
+    ? styles.displayUnitCardBroadcasting
+    : styles.displayUnitCardWaiting
+  const liveClass = isBroadcasting
+    ? styles.liveStatus
+    : `${styles.liveStatus} ${styles.liveStatusWaiting}`
 
   return (
     <>
@@ -384,20 +405,39 @@ export default function AdminDisplayPage({ params }: PageProps) {
       </div>
 
       <div
-        className={`${styles.panel} ${styles.infoPanel} ${styles.currentAppliedBanner} ${styles.cardApplied}`}
+        className={`${styles.panel} ${styles.infoPanel} ${styles.currentAppliedBanner} ${styles.broadcastBanner} ${bannerClass}`}
       >
-        <p className={styles.liveStatus}>
+        <p className={liveClass}>
           <span className={styles.liveStatusDot} aria-hidden="true" />
-          현재 송출 중
+          {settings?.broadcast_label ??
+            getBroadcastStatusLabel(broadcastStatus)}
         </p>
-        <p className={styles.appliedLabel}>현재 적용 화면</p>
-        <p className={styles.appliedSceneName}>
-          {currentSceneLabel ?? currentModeLabel}
-        </p>
-        <p className={styles.appliedModeLine}>{currentModeLabel}</p>
-        <Link href={scenesHref} className={styles.btnLink}>
-          Scene 관리로 이동 →
-        </Link>
+        {isBroadcasting ? (
+          <>
+            <p className={styles.appliedMetaLine}>
+              {getBroadcastStatusHint("BROADCASTING")}
+            </p>
+            <p className={styles.appliedLabel}>현재 적용 화면</p>
+            <p className={styles.appliedSceneName}>
+              {currentSceneLabel ?? currentModeLabel}
+            </p>
+            <p className={styles.appliedModeLine}>{currentModeLabel}</p>
+          </>
+        ) : (
+          <>
+            <p className={styles.appliedSceneName}>
+              현재 적용된 화면이 없습니다.
+            </p>
+            <p className={styles.appliedMetaLine}>
+              {getBroadcastStatusHint("WAITING")}
+            </p>
+          </>
+        )}
+        <div className={styles.broadcastBannerActions}>
+          <Link href={scenesHref} className={styles.btnLink}>
+            Scene 관리로 이동 →
+          </Link>
+        </div>
       </div>
 
       {message ? (

@@ -10,6 +10,7 @@ import {
   formatSettingsUpdatedAt,
   getDisplayModeLabel,
 } from "@/lib/display/current-applied"
+import type { DisplayBroadcastStatus } from "@/lib/display/broadcast-state"
 import { MonitorIcon } from "../../AdminIcons"
 import type { DisplayMode } from "@/lib/admin/constants"
 
@@ -22,6 +23,11 @@ type DisplayUnit = {
   current_mode?: DisplayMode | string
   current_scene?: { id: number; name: string } | null
   settings_updated_at?: string | null
+  broadcast_status?: DisplayBroadcastStatus
+  has_renderable_content?: boolean
+  broadcast_label?: string
+  current_scene_name?: string | null
+  mode_label?: string | null
 }
 
 type UnitForm = {
@@ -38,6 +44,24 @@ function storeUrl(code: string): string {
 
 function modeLabel(mode?: string): string {
   return getDisplayModeLabel(mode)
+}
+
+function broadcastStatusLabel(
+  status: DisplayBroadcastStatus,
+  override?: string,
+): string {
+  if (override) return override
+  return status === "BROADCASTING" ? "현재 송출 중" : "적용된 화면 없음"
+}
+
+function cardStatusClass(status: DisplayBroadcastStatus | undefined): string {
+  if (status === "BROADCASTING") return styles.displayUnitCardBroadcasting
+  return styles.displayUnitCardWaiting
+}
+
+function liveStatusClass(status: DisplayBroadcastStatus | undefined): string {
+  if (status === "BROADCASTING") return styles.liveStatus
+  return `${styles.liveStatus} ${styles.liveStatusWaiting}`
 }
 
 export default function AdminDisplayUnitsPage() {
@@ -157,20 +181,29 @@ export default function AdminDisplayUnitsPage() {
     }
   }
 
+  function sceneAndStatus(unit: DisplayUnit) {
+    const status = unit.broadcast_status ?? "WAITING"
+    const resolvedMode = unit.mode_label ?? modeLabel(unit.current_mode)
+    const sceneLabel =
+      status === "WAITING"
+        ? "적용된 화면 없음"
+        : formatCurrentAppliedSceneLabel({
+            sceneName: unit.current_scene_name ?? unit.current_scene?.name,
+            modeLabel: resolvedMode,
+          })
+    return { status, resolvedMode, sceneLabel }
+  }
+
   function renderUnitCard(unit: DisplayUnit) {
     const protectedUnit = isProtectedDisplayUnitCode(unit.code)
-    const sceneLabel = formatCurrentAppliedSceneLabel({
-      sceneName: unit.current_scene?.name,
-      modeLabel: modeLabel(unit.current_mode),
-    })
-    const currentMode = modeLabel(unit.current_mode)
+    const { status, resolvedMode, sceneLabel } = sceneAndStatus(unit)
     const updatedLabel = formatSettingsUpdatedAt(unit.settings_updated_at)
     const isRemoving = deletingBusy && deleting?.code === unit.code
 
     return (
       <article
         key={unit.id}
-        className={`${styles.unitCard} ${styles.cardApplied} ${
+        className={`${styles.unitCard} ${cardStatusClass(status)} ${
           isRemoving ? styles.unitCardRemoving : ""
         }`}
       >
@@ -196,22 +229,20 @@ export default function AdminDisplayUnitsPage() {
             </span>
           </div>
         </div>
-        <p className={styles.liveStatus}>
+        <p className={liveStatusClass(status)}>
           <span className={styles.liveStatusDot} aria-hidden="true" />
-          현재 송출 중
+          {broadcastStatusLabel(status, unit.broadcast_label)}
         </p>
         <p className={styles.unitCardCode}>{unit.code}</p>
         <p className={styles.appliedLabel}>현재 적용 화면</p>
         <p className={styles.appliedSceneName}>{sceneLabel}</p>
-        <p className={styles.appliedModeLine}>{currentMode}</p>
+        {status !== "WAITING" ? (
+          <p className={styles.appliedModeLine}>{resolvedMode}</p>
+        ) : null}
         {updatedLabel ? (
           <p className={styles.appliedMetaLine}>마지막 변경 {updatedLabel}</p>
         ) : null}
-        <div
-          className={`${styles.unitCardActions} ${
-            protectedUnit ? styles.unitCardActionsWide : ""
-          }`}
-        >
+        <div className={styles.unitCardActions}>
           <Link
             href={`/admin/display/${unit.code}`}
             className={`${styles.btn} ${styles.btnSecondary}`}
@@ -222,7 +253,7 @@ export default function AdminDisplayUnitsPage() {
           </Link>
           <Link
             href={`/admin/display-scenes/${unit.code}`}
-            className={`${styles.btn} ${styles.btnPrimary}`}
+            className={`${styles.btn} ${styles.btnSecondary}`}
             aria-disabled={isRemoving}
             tabIndex={isRemoving ? -1 : undefined}
           >
@@ -237,6 +268,14 @@ export default function AdminDisplayUnitsPage() {
           >
             보기
           </Link>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnSecondary}`}
+            disabled={isRemoving}
+            onClick={() => openEdit(unit)}
+          >
+            수정
+          </button>
           {protectedUnit ? null : (
             <button
               type="button"
@@ -303,7 +342,7 @@ export default function AdminDisplayUnitsPage() {
               <th>정렬</th>
               <th>현재 적용 화면</th>
               <th>모드</th>
-              <th>상태</th>
+              <th>송출</th>
               <th>관리</th>
             </tr>
           </thead>
@@ -315,10 +354,7 @@ export default function AdminDisplayUnitsPage() {
             ) : (
               units.map((unit) => {
                 const protectedUnit = isProtectedDisplayUnitCode(unit.code)
-                const sceneLabel = formatCurrentAppliedSceneLabel({
-                  sceneName: unit.current_scene?.name,
-                  modeLabel: modeLabel(unit.current_mode),
-                })
+                const { status, resolvedMode, sceneLabel } = sceneAndStatus(unit)
                 const updatedLabel = formatSettingsUpdatedAt(
                   unit.settings_updated_at,
                 )
@@ -340,12 +376,15 @@ export default function AdminDisplayUnitsPage() {
                           </span>
                         ) : null}
                       </div>
-                      <p className={styles.liveStatus} style={{ marginTop: 8 }}>
+                      <p
+                        className={liveStatusClass(status)}
+                        style={{ marginTop: 8 }}
+                      >
                         <span
                           className={styles.liveStatusDot}
                           aria-hidden="true"
                         />
-                        현재 송출 중
+                        {broadcastStatusLabel(status, unit.broadcast_label)}
                       </p>
                     </td>
                     <td>{unit.code}</td>
@@ -359,23 +398,23 @@ export default function AdminDisplayUnitsPage() {
                         </div>
                       ) : null}
                     </td>
-                    <td>{modeLabel(unit.current_mode)}</td>
+                    <td>{status === "WAITING" ? "—" : resolvedMode}</td>
                     <td>
                       <span
                         className={`${styles.badge} ${
-                          unit.is_active
-                            ? styles.badgeActive
+                          status === "BROADCASTING"
+                            ? styles.badgeApplied
                             : styles.badgeInactive
                         }`}
                       >
-                        {unit.is_active ? "활성" : "비활성"}
+                        {broadcastStatusLabel(status, unit.broadcast_label)}
                       </span>
                     </td>
                     <td>
                       <div className={styles.buttonRow}>
                         <Link
                           href={`/admin/display-scenes/${unit.code}`}
-                          className={`${styles.btn} ${styles.btnPrimary}`}
+                          className={`${styles.btn} ${styles.btnSecondary}`}
                         >
                           Scene
                         </Link>
@@ -384,6 +423,13 @@ export default function AdminDisplayUnitsPage() {
                           className={`${styles.btn} ${styles.btnSecondary}`}
                         >
                           설정
+                        </Link>
+                        <Link
+                          href={storeUrl(unit.code)}
+                          target="_blank"
+                          className={`${styles.btn} ${styles.btnSecondary}`}
+                        >
+                          보기
                         </Link>
                         <button
                           type="button"
