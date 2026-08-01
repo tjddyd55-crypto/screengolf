@@ -51,7 +51,9 @@ export default function AdminHomePage() {
   const router = useRouter()
   const [units, setUnits] = useState<DisplayUnitCard[]>([])
   const [error, setError] = useState("")
+  const [message, setMessage] = useState("")
   const [creating, setCreating] = useState(false)
+  const [activatingCode, setActivatingCode] = useState<string | null>(null)
 
   const loadUnits = useCallback(async () => {
     try {
@@ -75,6 +77,34 @@ export default function AdminHomePage() {
   useEffect(() => {
     loadUnits()
   }, [loadUnits])
+
+  async function handleActivateUnit(unit: DisplayUnitCard) {
+    if (activatingCode) return
+    setActivatingCode(unit.code)
+    setError("")
+    setMessage("")
+    try {
+      const res = await fetch(`/api/admin/display-units/${unit.code}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "activate", is_active: true }),
+      })
+      const json = (await res.json()) as {
+        success?: boolean
+        error?: string
+      }
+      if (!res.ok || !json.success) {
+        setError(json.error ?? "전광판 활성화에 실패했습니다.")
+        return
+      }
+      setMessage(`${unit.name}을 활성화했습니다.`)
+      await loadUnits()
+    } catch {
+      setError("전광판 활성화 중 오류가 발생했습니다.")
+    } finally {
+      setActivatingCode(null)
+    }
+  }
 
   async function handleCreateUnit() {
     setCreating(true)
@@ -126,6 +156,11 @@ export default function AdminHomePage() {
         </div>
       </div>
 
+      {message ? (
+        <div className={`${styles.message} ${styles.messageSuccess}`}>
+          {message}
+        </div>
+      ) : null}
       {error ? (
         <div className={`${styles.message} ${styles.messageError}`}>{error}</div>
       ) : null}
@@ -151,6 +186,7 @@ export default function AdminHomePage() {
           const updatedLabel = formatSettingsUpdatedAt(
             unit.settings_updated_at,
           )
+          const isActivating = activatingCode === unit.code
 
           return (
             <div
@@ -172,7 +208,12 @@ export default function AdminHomePage() {
                     ? "현재 송출 중"
                     : "적용된 화면 없음")}
               </p>
-              {status === "WAITING" ? (
+              {!unit.is_active ? (
+                <p className={styles.appliedMetaLine}>
+                  전광판이 비활성 상태입니다. 활성화하면 적용된 Scene이
+                  송출됩니다.
+                </p>
+              ) : status === "WAITING" ? (
                 <p className={styles.appliedMetaLine}>
                   {getBroadcastStatusHint("WAITING")}
                 </p>
@@ -190,9 +231,21 @@ export default function AdminHomePage() {
               ) : null}
               <p className={styles.cardMeta}>{unit.code}</p>
               <div className={styles.cardActions}>
+                {!unit.is_active ? (
+                  <button
+                    type="button"
+                    className={`${styles.btn} ${styles.btnPrimary}`}
+                    disabled={isActivating}
+                    onClick={() => void handleActivateUnit(unit)}
+                  >
+                    {isActivating ? "활성화 중..." : "활성화"}
+                  </button>
+                ) : null}
                 <Link
                   href={`/admin/display-scenes/${unit.code}`}
-                  className={`${styles.btn} ${styles.btnPrimary}`}
+                  className={`${styles.btn} ${
+                    unit.is_active ? styles.btnPrimary : styles.btnSecondary
+                  }`}
                 >
                   Scene 관리
                 </Link>

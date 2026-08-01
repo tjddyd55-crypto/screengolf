@@ -26,6 +26,7 @@ import {
   type DisplayBroadcastStatus,
 } from "@/lib/display/broadcast-state"
 import {
+  applySceneCardStates,
   filterScenesByName,
   getSceneListCounts,
   mergeReorderWithPinnedCurrent,
@@ -161,6 +162,7 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
   const [broadcastSceneName, setBroadcastSceneName] = useState<string | null>(
     null,
   )
+  const [broadcastSceneId, setBroadcastSceneId] = useState<number | null>(null)
   const [broadcastModeLabel, setBroadcastModeLabel] = useState<string | null>(
     null,
   )
@@ -186,6 +188,7 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
           data?: {
             broadcast_status?: DisplayBroadcastStatus
             broadcast_label?: string
+            broadcast_scene_id?: number | null
             current_scene_name?: string | null
             mode_label?: string | null
           }
@@ -200,6 +203,7 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
           settingsJson.data?.broadcast_label ?? getBroadcastStatusLabel(status),
         )
         setBroadcastSceneName(settingsJson.data?.current_scene_name ?? null)
+        setBroadcastSceneId(settingsJson.data?.broadcast_scene_id ?? null)
         setBroadcastModeLabel(settingsJson.data?.mode_label ?? null)
       } catch {
         setError("Scene 목록을 불러오지 못했습니다.")
@@ -229,14 +233,24 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
     [assets],
   )
 
+  // 카드 "현재 적용" 상태는 broadcast SSOT로만 계산한다 (API is_current 사용 금지)
+  const sceneCards = useMemo(
+    () =>
+      applySceneCardStates(scenes, {
+        broadcastStatus,
+        broadcastSceneId,
+      }),
+    [scenes, broadcastStatus, broadcastSceneId],
+  )
+
   const { current: currentScene, rest: restScenes } = useMemo(
-    () => partitionScenesForDisplay(scenes),
-    [scenes],
+    () => partitionScenesForDisplay(sceneCards),
+    [sceneCards],
   )
 
   const displayScenes = useMemo(
-    () => sortScenesForDisplay(scenes),
-    [scenes],
+    () => sortScenesForDisplay(sceneCards),
+    [sceneCards],
   )
 
   const searching = Boolean(searchQuery.trim())
@@ -246,7 +260,7 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
     [displayScenes, searchQuery],
   )
 
-  const counts = useMemo(() => getSceneListCounts(scenes), [scenes])
+  const counts = useMemo(() => getSceneListCounts(sceneCards), [sceneCards])
 
   const listScenes = searching ? filteredScenes : restScenes
 
@@ -482,7 +496,7 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
   }
 
   async function handleDeactivate(id: number) {
-    const target = scenes.find((scene) => scene.id === id)
+    const target = sceneCards.find((scene) => scene.id === id)
     const confirmMessage = target?.is_current
       ? "현재 적용 중인 Scene을 비활성화하면 전광판이 적용된 화면 없음 상태로 변경됩니다."
       : "이 Scene을 비활성 처리하시겠습니까?"

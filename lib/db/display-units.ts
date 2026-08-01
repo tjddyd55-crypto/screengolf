@@ -3,6 +3,7 @@ import type { DisplayMode } from "@/lib/admin/constants"
 import {
   isProtectedDisplayUnitCode,
   normalizeDisplayUnitCode,
+  protectedUnitDeactivateErrorMessage,
   protectedUnitDeleteErrorMessage,
 } from "@/lib/display/protected-units"
 
@@ -198,7 +199,7 @@ export function updateDisplayUnit(
     isProtectedDisplayUnitCode(current.code) &&
     input.is_active === false
   ) {
-    throw new Error(protectedUnitDeleteErrorMessage())
+    throw new Error(protectedUnitDeactivateErrorMessage())
   }
 
   getDb()
@@ -217,12 +218,33 @@ export function updateDisplayUnit(
   return getDisplayUnitById(id)
 }
 
+/**
+ * 전광판 활성화. 보호 Unit(display-1/2)도 허용한다.
+ * 삭제·비활성화는 여전히 금지된다.
+ */
+export function activateDisplayUnit(id: number): DisplayUnit {
+  const current = getDisplayUnitById(id)
+  if (!current) {
+    throw new Error("전광판을 찾을 수 없습니다.")
+  }
+
+  if (current.is_active) {
+    return current
+  }
+
+  const updated = updateDisplayUnit(id, { is_active: true })
+  if (!updated) {
+    throw new Error("전광판 활성화에 실패했습니다.")
+  }
+  return updated
+}
+
 export function deactivateDisplayUnit(id: number): boolean {
   const current = getDisplayUnitById(id)
   if (!current) return false
 
   if (isProtectedDisplayUnitCode(current.code)) {
-    throw new Error(protectedUnitDeleteErrorMessage())
+    throw new Error(protectedUnitDeactivateErrorMessage())
   }
 
   const result = getDb()

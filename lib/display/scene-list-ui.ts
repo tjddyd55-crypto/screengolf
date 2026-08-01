@@ -1,4 +1,5 @@
 import type { DisplayMode } from "@/lib/admin/constants"
+import type { DisplayBroadcastStatus } from "@/lib/display/broadcast-state"
 
 export type SceneListItem = {
   id: number
@@ -7,6 +8,52 @@ export type SceneListItem = {
   sort_order: number
   is_active: boolean
   is_current: boolean
+}
+
+export type SceneCardState = {
+  isCurrent: boolean
+  showBroadcastBadge: boolean
+  applyDisabled: boolean
+}
+
+/**
+ * Scene 카드의 "현재 적용" 판정 SSOT.
+ * broadcast_status와 송출 중인 Scene id만 비교한다.
+ * raw settings.mode / display_settings.current_scene_id를 직접 쓰지 않는다.
+ */
+export function resolveSceneCardState(input: {
+  broadcastStatus: DisplayBroadcastStatus
+  broadcastSceneId: number | null
+  sceneId: number
+}): SceneCardState {
+  const isCurrent =
+    input.broadcastStatus === "BROADCASTING" &&
+    input.broadcastSceneId != null &&
+    input.broadcastSceneId === input.sceneId
+
+  return {
+    isCurrent,
+    showBroadcastBadge: isCurrent,
+    applyDisabled: isCurrent,
+  }
+}
+
+/** 목록 전체에 카드 상태 SSOT를 적용한다. */
+export function applySceneCardStates<T extends SceneListItem>(
+  scenes: T[],
+  broadcast: {
+    broadcastStatus: DisplayBroadcastStatus
+    broadcastSceneId: number | null
+  },
+): T[] {
+  return scenes.map((scene) => ({
+    ...scene,
+    is_current: resolveSceneCardState({
+      broadcastStatus: broadcast.broadcastStatus,
+      broadcastSceneId: broadcast.broadcastSceneId,
+      sceneId: scene.id,
+    }).isCurrent,
+  }))
 }
 
 function sortByOrderThenId<T extends SceneListItem>(scenes: T[]): T[] {

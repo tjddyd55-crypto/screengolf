@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  applySceneCardStates,
   buildSortOrderUpdates,
   filterScenesByName,
   formatDuplicatedSceneName,
@@ -7,6 +8,7 @@ import {
   mergeReorderWithPinnedCurrent,
   moveSceneId,
   partitionScenesForDisplay,
+  resolveSceneCardState,
   sortScenesForDisplay,
   type SceneListItem,
 } from "@/lib/display/scene-list-ui"
@@ -121,5 +123,65 @@ describe("scene-list-ui", () => {
     ])
     expect(list[0]?.is_current).toBe(true)
     expect(list[1]?.is_current).toBe(false)
+  })
+})
+
+describe("resolveSceneCardState (broadcast SSOT)", () => {
+  it("BROADCASTING이고 송출 Scene과 id가 같으면 현재 적용", () => {
+    const state = resolveSceneCardState({
+      broadcastStatus: "BROADCASTING",
+      broadcastSceneId: 11,
+      sceneId: 11,
+    })
+    expect(state).toEqual({
+      isCurrent: true,
+      showBroadcastBadge: true,
+      applyDisabled: true,
+    })
+  })
+
+  it("WAITING이면 송출 Scene id가 있어도 현재 적용이 아니다", () => {
+    const state = resolveSceneCardState({
+      broadcastStatus: "WAITING",
+      broadcastSceneId: 11,
+      sceneId: 11,
+    })
+    expect(state.isCurrent).toBe(false)
+    expect(state.showBroadcastBadge).toBe(false)
+    expect(state.applyDisabled).toBe(false)
+  })
+
+  it("다른 Scene id는 현재 적용이 아니다", () => {
+    expect(
+      resolveSceneCardState({
+        broadcastStatus: "BROADCASTING",
+        broadcastSceneId: 11,
+        sceneId: 12,
+      }).isCurrent,
+    ).toBe(false)
+  })
+
+  it("WAITING이면 목록 전체에 현재 적용 카드가 없다", () => {
+    const cards = applySceneCardStates(
+      [
+        scene({ id: 11, name: "랭킹", is_current: true }),
+        scene({ id: 12, name: "공지" }),
+      ],
+      { broadcastStatus: "WAITING", broadcastSceneId: 11 },
+    )
+    expect(cards.every((card) => !card.is_current)).toBe(true)
+    expect(partitionScenesForDisplay(cards).current).toBeNull()
+  })
+
+  it("BROADCASTING이면 해당 Scene만 현재 적용으로 표시된다", () => {
+    const cards = applySceneCardStates(
+      [
+        scene({ id: 11, name: "랭킹", is_current: false }),
+        scene({ id: 12, name: "공지", is_current: true }),
+      ],
+      { broadcastStatus: "BROADCASTING", broadcastSceneId: 11 },
+    )
+    expect(cards.find((card) => card.id === 11)?.is_current).toBe(true)
+    expect(cards.find((card) => card.id === 12)?.is_current).toBe(false)
   })
 })

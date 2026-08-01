@@ -1,13 +1,19 @@
 import { NextResponse } from "next/server"
 import {
+  activateDisplayUnit,
   deleteDisplayUnitByCode,
   getDisplayUnitByCode,
   updateDisplayUnit,
 } from "@/lib/db/display-units"
 import { getDisplaySettingsView } from "@/lib/db/display-settings"
 import {
+  getUnitBroadcastState,
+  toAdminBroadcastFields,
+} from "@/lib/display/resolve-broadcast-state"
+import {
   isProtectedDisplayUnitCode,
   normalizeDisplayUnitCode,
+  protectedUnitDeactivateErrorMessage,
   protectedUnitDeleteErrorMessage,
 } from "@/lib/display/protected-units"
 
@@ -36,6 +42,7 @@ export async function GET(_request: Request, context: RouteContext) {
         current_mode: settings.mode,
         current_scene: settings.current_scene,
         settings_updated_at: settings.updated_at,
+        ...toAdminBroadcastFields(getUnitBroadcastState(unit.id)),
       },
     })
   } catch (error) {
@@ -62,17 +69,46 @@ export async function PATCH(request: Request, context: RouteContext) {
       name?: string
       sort_order?: number
       is_active?: boolean
+      action?: string
+    }
+
+    // 명시적 활성화 액션 — 보호 Unit도 허용
+    if (body.action === "activate" || body.is_active === true) {
+      const activated = activateDisplayUnit(unit.id)
+      const patched =
+        body.name !== undefined || body.sort_order !== undefined
+          ? updateDisplayUnit(activated.id, {
+              name: body.name,
+              sort_order: body.sort_order,
+            })
+          : activated
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          ...patched,
+          ...toAdminBroadcastFields(getUnitBroadcastState(activated.id)),
+        },
+      })
     }
 
     const updated = updateDisplayUnit(unit.id, body)
-    return NextResponse.json({ success: true, data: updated })
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...updated,
+        ...toAdminBroadcastFields(getUnitBroadcastState(unit.id)),
+      },
+    })
   } catch (error) {
     console.error("[admin/display-units/code] PATCH failed:", error)
     const message =
       error instanceof Error ? error.message : "전광판 수정에 실패했습니다."
-    const status = message.includes(protectedUnitDeleteErrorMessage())
-      ? 403
-      : 400
+    const status =
+      message === protectedUnitDeleteErrorMessage() ||
+      message === protectedUnitDeactivateErrorMessage()
+        ? 403
+        : 400
     return NextResponse.json({ success: false, error: message }, { status })
   }
 }

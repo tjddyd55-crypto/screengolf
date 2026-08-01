@@ -25,11 +25,12 @@ async function loadWithTempDb() {
   const scenes = await import("@/lib/db/display-scenes")
   const settings = await import("@/lib/db/display-settings")
   const resolve = await import("@/lib/display/resolve-display-state")
+  const broadcast = await import("@/lib/display/resolve-broadcast-state")
 
   closeDbForTests = sqlite.closeDbForTests
   sqlite.getDb()
 
-  return { ...units, ...scenes, ...settings, ...resolve }
+  return { ...units, ...scenes, ...settings, ...resolve, ...broadcast }
 }
 
 describe("display units multi-instance", () => {
@@ -113,7 +114,7 @@ describe("display units multi-instance", () => {
     const api = await loadWithTempDb()
     const unit1 = api.getDisplayUnitByCode("display-1")!
     expect(() => api.deactivateDisplayUnit(unit1.id)).toThrow(
-      /기본 전광판은 삭제할 수 없습니다/,
+      /기본 전광판은 비활성화할 수 없습니다/,
     )
   })
 
@@ -121,8 +122,42 @@ describe("display units multi-instance", () => {
     const api = await loadWithTempDb()
     const unit2 = api.getDisplayUnitByCode("display-2")!
     expect(() => api.deactivateDisplayUnit(unit2.id)).toThrow(
-      /기본 전광판은 삭제할 수 없습니다/,
+      /기본 전광판은 비활성화할 수 없습니다/,
     )
+  })
+
+  it("allows reactivating protected display-2", async () => {
+    const api = await loadWithTempDb()
+    const sqlite = await import("@/lib/db/sqlite")
+    const unit2 = api.getDisplayUnitByCode("display-2")!
+    const ranking = api
+      .listDisplayScenes(unit2.id)
+      .find((scene) => scene.mode === "ranking")!
+    api.applyDisplayScene(ranking.id)
+
+    // 보호 Unit은 soft-deactivate API가 막히므로 DB로 비활성 상태만 재현
+    sqlite
+      .getDb()
+      .prepare(
+        "UPDATE display_units SET is_active = 0 WHERE id = ?",
+      )
+      .run(unit2.id)
+
+    expect(api.getDisplayUnitByCode("display-2")!.is_active).toBe(false)
+    expect(api.getUnitBroadcastState(unit2.id).status).toBe("WAITING")
+
+    const activated = api.activateDisplayUnit(unit2.id)
+    expect(activated.is_active).toBe(true)
+    expect(api.getUnitBroadcastState(unit2.id).status).toBe("BROADCASTING")
+    expect(api.resolveDisplayState("display-2").mode).toBe("ranking")
+  })
+
+  it("rejects deactivating protected unit via updateDisplayUnit", async () => {
+    const api = await loadWithTempDb()
+    const unit2 = api.getDisplayUnitByCode("display-2")!
+    expect(() =>
+      api.updateDisplayUnit(unit2.id, { is_active: false }),
+    ).toThrow(/기본 전광판은 비활성화할 수 없습니다/)
   })
 
   it("rejects hard-delete of display-1 and display-2", async () => {

@@ -8,6 +8,7 @@ import {
 } from "@/lib/display/current-applied"
 import {
   isProtectedDisplayUnitCode,
+  protectedUnitDeactivateErrorMessage,
   protectedUnitDeleteErrorMessage,
 } from "@/lib/display/protected-units"
 
@@ -74,9 +75,12 @@ describe("protected display units", () => {
     expect(isProtectedDisplayUnitCode("display-3")).toBe(false)
   })
 
-  it("returns unified delete error message", () => {
+  it("returns unified delete and deactivate error messages", () => {
     expect(protectedUnitDeleteErrorMessage()).toBe(
       "기본 전광판은 삭제할 수 없습니다.",
+    )
+    expect(protectedUnitDeactivateErrorMessage()).toBe(
+      "기본 전광판은 비활성화할 수 없습니다.",
     )
   })
 })

@@ -72,6 +72,7 @@ export default function AdminDisplayUnitsPage() {
   const [editing, setEditing] = useState<DisplayUnit | null>(null)
   const [deleting, setDeleting] = useState<DisplayUnit | null>(null)
   const [deletingBusy, setDeletingBusy] = useState(false)
+  const [activatingCode, setActivatingCode] = useState<string | null>(null)
   const [form, setForm] = useState<UnitForm>({
     name: "",
     sort_order: "",
@@ -131,13 +132,15 @@ export default function AdminDisplayUnitsPage() {
     setError("")
     setMessage("")
     try {
+      const protectedUnit = isProtectedDisplayUnitCode(editing.code)
       const res = await fetch(`/api/admin/display-units/${editing.code}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: form.name,
           sort_order: form.sort_order ? Number(form.sort_order) : undefined,
-          is_active: form.is_active,
+          // 보호 Unit은 수정 폼에서 비활성화할 수 없다. 활성화는 전용 버튼 사용.
+          ...(protectedUnit ? {} : { is_active: form.is_active }),
         }),
       })
       const json = (await res.json()) as { success?: boolean; error?: string }
@@ -150,6 +153,37 @@ export default function AdminDisplayUnitsPage() {
       await loadUnits()
     } catch {
       setError("수정 중 오류가 발생했습니다.")
+    }
+  }
+
+  async function handleActivate(unit: DisplayUnit) {
+    if (activatingCode) return
+    setActivatingCode(unit.code)
+    setError("")
+    setMessage("")
+    try {
+      const res = await fetch(`/api/admin/display-units/${unit.code}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "activate", is_active: true }),
+      })
+      const json = (await res.json()) as {
+        success?: boolean
+        error?: string
+        data?: DisplayUnit
+      }
+      if (!res.ok || !json.success) {
+        setError(json.error ?? "전광판 활성화에 실패했습니다.")
+        return
+      }
+      setMessage(
+        `${unit.name}을 활성화했습니다. Scene이 유효하면 송출이 시작됩니다.`,
+      )
+      await loadUnits()
+    } catch {
+      setError("전광판 활성화 중 오류가 발생했습니다.")
+    } finally {
+      setActivatingCode(null)
     }
   }
 
@@ -199,6 +233,7 @@ export default function AdminDisplayUnitsPage() {
     const { status, resolvedMode, sceneLabel } = sceneAndStatus(unit)
     const updatedLabel = formatSettingsUpdatedAt(unit.settings_updated_at)
     const isRemoving = deletingBusy && deleting?.code === unit.code
+    const isActivating = activatingCode === unit.code
 
     return (
       <article
@@ -242,10 +277,28 @@ export default function AdminDisplayUnitsPage() {
         {updatedLabel ? (
           <p className={styles.appliedMetaLine}>마지막 변경 {updatedLabel}</p>
         ) : null}
+        {!unit.is_active ? (
+          <p className={styles.formHint} style={{ marginTop: 8 }}>
+            비활성 전광판은 화면에 송출되지 않습니다. 활성화 후 Scene을
+            적용하세요.
+          </p>
+        ) : null}
         <div className={styles.unitCardActions}>
+          {!unit.is_active ? (
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              disabled={isRemoving || isActivating}
+              onClick={() => void handleActivate(unit)}
+            >
+              {isActivating ? "활성화 중..." : "활성화"}
+            </button>
+          ) : null}
           <Link
             href={`/admin/display-scenes/${unit.code}`}
-            className={`${styles.btn} ${styles.btnPrimary}`}
+            className={`${styles.btn} ${
+              unit.is_active ? styles.btnPrimary : styles.btnSecondary
+            }`}
             aria-disabled={isRemoving}
             tabIndex={isRemoving ? -1 : undefined}
           >
@@ -263,7 +316,7 @@ export default function AdminDisplayUnitsPage() {
           <button
             type="button"
             className={`${styles.btn} ${styles.btnSecondary}`}
-            disabled={isRemoving}
+            disabled={isRemoving || isActivating}
             onClick={() => openEdit(unit)}
           >
             수정
@@ -272,7 +325,7 @@ export default function AdminDisplayUnitsPage() {
             <button
               type="button"
               className={`${styles.btn} ${styles.btnDangerOutline}`}
-              disabled={isRemoving}
+              disabled={isRemoving || isActivating}
               onClick={() => {
                 setDeleting(unit)
                 setError("")
@@ -284,7 +337,8 @@ export default function AdminDisplayUnitsPage() {
         </div>
         {protectedUnit ? (
           <p className={styles.formHint} style={{ marginTop: 10 }}>
-            기본 전광판은 삭제할 수 없습니다.
+            기본 전광판은 삭제·비활성화할 수 없습니다. 비활성 상태라면
+            활성화는 가능합니다.
           </p>
         ) : null}
       </article>
@@ -352,6 +406,7 @@ export default function AdminDisplayUnitsPage() {
                 )
                 const isRemoving =
                   deletingBusy && deleting?.code === unit.code
+                const isActivating = activatingCode === unit.code
                 return (
                   <tr key={unit.id}>
                     <td>
@@ -365,6 +420,13 @@ export default function AdminDisplayUnitsPage() {
                             className={`${styles.badge} ${styles.badgeInactive}`}
                           >
                             기본
+                          </span>
+                        ) : null}
+                        {!unit.is_active ? (
+                          <span
+                            className={`${styles.badge} ${styles.badgeInactive}`}
+                          >
+                            비활성
                           </span>
                         ) : null}
                       </div>
@@ -404,9 +466,23 @@ export default function AdminDisplayUnitsPage() {
                     </td>
                     <td>
                       <div className={styles.buttonRow}>
+                        {!unit.is_active ? (
+                          <button
+                            type="button"
+                            className={`${styles.btn} ${styles.btnPrimary}`}
+                            disabled={isRemoving || isActivating}
+                            onClick={() => void handleActivate(unit)}
+                          >
+                            {isActivating ? "활성화 중..." : "활성화"}
+                          </button>
+                        ) : null}
                         <Link
                           href={`/admin/display-scenes/${unit.code}`}
-                          className={`${styles.btn} ${styles.btnPrimary}`}
+                          className={`${styles.btn} ${
+                            unit.is_active
+                              ? styles.btnPrimary
+                              : styles.btnSecondary
+                          }`}
                         >
                           Scene 관리
                         </Link>
@@ -420,7 +496,7 @@ export default function AdminDisplayUnitsPage() {
                         <button
                           type="button"
                           className={`${styles.btn} ${styles.btnSecondary}`}
-                          disabled={isRemoving}
+                          disabled={isRemoving || isActivating}
                           onClick={() => openEdit(unit)}
                         >
                           수정
@@ -430,7 +506,7 @@ export default function AdminDisplayUnitsPage() {
                             type="button"
                             className={`${styles.btn} ${styles.btnSecondary}`}
                             disabled
-                            title="기본 전광판은 삭제할 수 없습니다."
+                            title="기본 전광판은 삭제·비활성화할 수 없습니다."
                           >
                             삭제
                           </button>
@@ -438,7 +514,7 @@ export default function AdminDisplayUnitsPage() {
                           <button
                             type="button"
                             className={`${styles.btn} ${styles.btnDangerOutline}`}
-                            disabled={isRemoving}
+                            disabled={isRemoving || isActivating}
                             onClick={() => {
                               setDeleting(unit)
                               setError("")
@@ -503,7 +579,14 @@ export default function AdminDisplayUnitsPage() {
                     활성
                   </label>
                 </div>
-              ) : null}
+              ) : (
+                <p className={styles.formHint}>
+                  기본 전광판은 삭제·비활성화할 수 없습니다.
+                  {!editing.is_active
+                    ? " 비활성 상태이므로 목록의 ‘활성화’ 버튼으로 켤 수 있습니다."
+                    : ""}
+                </p>
+              )}
               <div className={styles.buttonRow}>
                 <button
                   type="submit"

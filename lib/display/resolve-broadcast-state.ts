@@ -107,6 +107,7 @@ export function toAdminBroadcastFields(state: DisplayBroadcastState): {
   has_renderable_content: boolean
   broadcast_reason: DisplayBroadcastState["reason"]
   broadcast_label: string
+  broadcast_scene_id: number | null
   current_scene_name: string | null
   mode_label: string | null
 } {
@@ -115,7 +116,11 @@ export function toAdminBroadcastFields(state: DisplayBroadcastState): {
     has_renderable_content: state.hasRenderableContent,
     broadcast_reason: state.reason,
     broadcast_label: getBroadcastStatusLabel(state.status),
-    current_scene_name: state.currentSceneName,
+    // 송출 판정과 일치하는 Scene id만 노출한다 (WAITING이면 null)
+    broadcast_scene_id:
+      state.status === "BROADCASTING" ? state.currentSceneId : null,
+    current_scene_name:
+      state.status === "BROADCASTING" ? state.currentSceneName : null,
     mode_label: state.modeLabel,
   }
 }

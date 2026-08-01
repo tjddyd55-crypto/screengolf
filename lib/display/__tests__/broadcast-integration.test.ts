@@ -264,6 +264,32 @@ describe("broadcast state integration", () => {
     expect(api.getUnitBroadcastState(u1.id).status).toBe("WAITING")
   })
 
+  it("exposes no broadcast scene id when unit is inactive", async () => {
+    const api = await loadWithTempDb()
+    const unit = api.createDisplayUnit({ name: "테스트 전광판" })
+    const ranking = api
+      .listDisplayScenes(unit.id)
+      .find((scene) => scene.mode === "ranking")!
+    api.applyDisplayScene(ranking.id)
+
+    const broadcasting = api.toAdminBroadcastFields(
+      api.getUnitBroadcastState(unit.id),
+    )
+    expect(broadcasting.broadcast_status).toBe("BROADCASTING")
+    expect(broadcasting.broadcast_scene_id).toBe(ranking.id)
+
+    api.deactivateDisplayUnit(unit.id)
+
+    // raw current_scene_id는 남아 있어도 카드 SSOT는 WAITING이어야 한다
+    expect(api.getDisplaySettings(unit.id).current_scene_id).toBe(ranking.id)
+    const waiting = api.toAdminBroadcastFields(
+      api.getUnitBroadcastState(unit.id),
+    )
+    expect(waiting.broadcast_status).toBe("WAITING")
+    expect(waiting.broadcast_scene_id).toBeNull()
+    expect(waiting.current_scene_name).toBeNull()
+  })
+
   it("matches reusable scene by content ids, not by name alone", async () => {
     const api = await loadWithTempDb()
     const migrate = await import("@/lib/display/migrate-direct-to-scene")
