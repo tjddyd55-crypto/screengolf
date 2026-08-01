@@ -1523,6 +1523,31 @@
   font-size: 13px;
 }
 
+.sceneUploadInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.sceneUploadButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 4px;
+  cursor: pointer;
+}
+
+.sceneUploadButton[aria-busy="true"] {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
 @media (max-width: 1100px) {
   .displayGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2338,6 +2363,11 @@
   .sceneCardActions .btn {
     width: 100%;
     min-height: 40px;
+  }
+
+  .sceneUploadButton {
+    width: 100%;
+    box-sizing: border-box;
   }
 }
 

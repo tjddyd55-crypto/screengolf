@@ -20,6 +20,7 @@ import ScenePreviewFrame from "@/components/display/ScenePreviewFrame"
 import SceneManageCard, {
   type SceneCardData,
 } from "@/components/admin/SceneManageCard"
+import SceneAssetField from "@/components/admin/SceneAssetField"
 import {
   getBroadcastStatusHint,
   getBroadcastStatusLabel,
@@ -34,6 +35,11 @@ import {
   partitionScenesForDisplay,
   sortScenesForDisplay,
 } from "@/lib/display/scene-list-ui"
+import {
+  layoutTypeForSceneSlot,
+  mergeUploadedAsset,
+  type UploadedDisplayAsset,
+} from "@/lib/display/scene-asset-upload"
 
 type DisplayAsset = {
   id: number
@@ -89,24 +95,6 @@ const EMPTY_FORM: SceneForm = {
   is_active: true,
 }
 
-function assetLabel(asset: DisplayAsset): string {
-  const displayName =
-    asset.title ||
-    asset.original_name ||
-    asset.originalName ||
-    `파일 #${asset.id}`
-  const original = asset.original_name || asset.originalName || ""
-  const format = (asset.mime_type || "").split("/")[1]?.toUpperCase() || ""
-  const size = asset.sizeLabel ? ` · ${asset.sizeLabel}` : ""
-  const status =
-    asset.file_missing || asset.fileMissing || asset.status === "missing"
-      ? " · 파일 누락"
-      : ""
-  const originalHint =
-    original && original !== displayName ? ` (${original})` : ""
-  return `${displayName}${originalHint}${format ? ` · ${format}` : ""}${size}${status}`
-}
-
 function isAssetMissing(
   asset:
     | {
@@ -156,6 +144,33 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
   const [dragOverId, setDragOverId] = useState<number | null>(null)
   const [showClearModal, setShowClearModal] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [assetUploading, setAssetUploading] = useState({
+    full: false,
+    left: false,
+    right: false,
+  })
+  const isAssetUploading =
+    assetUploading.full || assetUploading.left || assetUploading.right
+
+  function handleAssetUploaded(asset: UploadedDisplayAsset) {
+    setAssets((prev) =>
+      mergeUploadedAsset(prev, {
+        id: asset.id,
+        title: asset.title,
+        file_url: asset.file_url || asset.fileUrl || "",
+        fileUrl: asset.fileUrl || asset.file_url,
+        file_type: asset.file_type,
+        mime_type: asset.mime_type,
+        original_name: asset.original_name || asset.originalName,
+        originalName: asset.originalName || asset.original_name,
+        layout_type: asset.layout_type,
+        sizeLabel: asset.sizeLabel,
+        file_missing: Boolean(asset.file_missing || asset.fileMissing),
+        fileMissing: Boolean(asset.fileMissing || asset.file_missing),
+        status: asset.status,
+      }),
+    )
+  }
   const [broadcastStatus, setBroadcastStatus] =
     useState<DisplayBroadcastStatus>("WAITING")
   const [broadcastLabel, setBroadcastLabel] = useState("적용된 화면 없음")
@@ -942,67 +957,52 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
               ) : null}
 
               {form.mode === "media_full" ? (
-                <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>전체 화면 파일</label>
-                  <select
-                    className={styles.formSelect}
-                    value={form.media_full_file_id}
-                    onChange={(e) =>
-                      setForm({ ...form, media_full_file_id: e.target.value })
-                    }
-                    required
-                  >
-                    <option value="">파일 선택</option>
-                    {fullAssets.map((asset) => (
-                      <option key={asset.id} value={asset.id}>
-                        {assetLabel(asset)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <SceneAssetField
+                  label="전체 화면 파일"
+                  value={form.media_full_file_id}
+                  assets={fullAssets}
+                  layoutType={layoutTypeForSceneSlot("full")}
+                  disabled={saving}
+                  onChange={(assetId) =>
+                    setForm({ ...form, media_full_file_id: assetId })
+                  }
+                  onUploaded={handleAssetUploaded}
+                  onLoadingChange={(loading) =>
+                    setAssetUploading((prev) => ({ ...prev, full: loading }))
+                  }
+                />
               ) : null}
 
               {form.mode === "media_split" ? (
                 <>
-                  <div className={styles.formGroup}>
-                    <label className={styles.formLabel}>왼쪽 파일</label>
-                    <select
-                      className={styles.formSelect}
-                      value={form.media_left_file_id}
-                      onChange={(e) =>
-                        setForm({ ...form, media_left_file_id: e.target.value })
-                      }
-                      required
-                    >
-                      <option value="">파일 선택</option>
-                      {splitAssets.map((asset) => (
-                        <option key={asset.id} value={asset.id}>
-                          {assetLabel(asset)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className={styles.formGroup}>
-                    <label className={styles.formLabel}>오른쪽 파일</label>
-                    <select
-                      className={styles.formSelect}
-                      value={form.media_right_file_id}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          media_right_file_id: e.target.value,
-                        })
-                      }
-                      required
-                    >
-                      <option value="">파일 선택</option>
-                      {splitAssets.map((asset) => (
-                        <option key={asset.id} value={asset.id}>
-                          {assetLabel(asset)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <SceneAssetField
+                    label="왼쪽 파일"
+                    value={form.media_left_file_id}
+                    assets={splitAssets}
+                    layoutType={layoutTypeForSceneSlot("left")}
+                    disabled={saving}
+                    onChange={(assetId) =>
+                      setForm({ ...form, media_left_file_id: assetId })
+                    }
+                    onUploaded={handleAssetUploaded}
+                    onLoadingChange={(loading) =>
+                      setAssetUploading((prev) => ({ ...prev, left: loading }))
+                    }
+                  />
+                  <SceneAssetField
+                    label="오른쪽 파일"
+                    value={form.media_right_file_id}
+                    assets={splitAssets}
+                    layoutType={layoutTypeForSceneSlot("right")}
+                    disabled={saving}
+                    onChange={(assetId) =>
+                      setForm({ ...form, media_right_file_id: assetId })
+                    }
+                    onUploaded={handleAssetUploaded}
+                    onLoadingChange={(loading) =>
+                      setAssetUploading((prev) => ({ ...prev, right: loading }))
+                    }
+                  />
                 </>
               ) : null}
 
@@ -1050,7 +1050,7 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
                 <button
                   type="button"
                   className={`${styles.btn} ${styles.btnSecondary}`}
-                  disabled={saving}
+                  disabled={saving || isAssetUploading}
                   onClick={() => setShowModal(false)}
                 >
                   취소
@@ -1058,14 +1058,14 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
                 <button
                   type="submit"
                   className={`${styles.btn} ${styles.btnSecondary}`}
-                  disabled={formMediaInvalid || saving}
+                  disabled={formMediaInvalid || saving || isAssetUploading}
                 >
                   Scene 저장
                 </button>
                 <button
                   type="button"
                   className={`${styles.btn} ${styles.btnPrimary}`}
-                  disabled={formMediaInvalid || saving}
+                  disabled={formMediaInvalid || saving || isAssetUploading}
                   onClick={() => {
                     void saveScene(true)
                   }}
@@ -1075,7 +1075,7 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
                 <button
                   type="button"
                   className={`${styles.btn} ${styles.btnSecondary}`}
-                  disabled={saving}
+                  disabled={saving || isAssetUploading}
                   onClick={() => setShowFormPreview(true)}
                 >
                   미리보기
