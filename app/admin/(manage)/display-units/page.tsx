@@ -244,16 +244,8 @@ export default function AdminDisplayUnitsPage() {
         ) : null}
         <div className={styles.unitCardActions}>
           <Link
-            href={`/admin/display/${unit.code}`}
-            className={`${styles.btn} ${styles.btnSecondary}`}
-            aria-disabled={isRemoving}
-            tabIndex={isRemoving ? -1 : undefined}
-          >
-            설정
-          </Link>
-          <Link
             href={`/admin/display-scenes/${unit.code}`}
-            className={`${styles.btn} ${styles.btnSecondary}`}
+            className={`${styles.btn} ${styles.btnPrimary}`}
             aria-disabled={isRemoving}
             tabIndex={isRemoving ? -1 : undefined}
           >
@@ -266,7 +258,7 @@ export default function AdminDisplayUnitsPage() {
             aria-disabled={isRemoving}
             tabIndex={isRemoving ? -1 : undefined}
           >
-            보기
+            전광판 보기
           </Link>
           <button
             type="button"
@@ -414,22 +406,16 @@ export default function AdminDisplayUnitsPage() {
                       <div className={styles.buttonRow}>
                         <Link
                           href={`/admin/display-scenes/${unit.code}`}
-                          className={`${styles.btn} ${styles.btnSecondary}`}
+                          className={`${styles.btn} ${styles.btnPrimary}`}
                         >
-                          Scene
-                        </Link>
-                        <Link
-                          href={`/admin/display/${unit.code}`}
-                          className={`${styles.btn} ${styles.btnSecondary}`}
-                        >
-                          설정
+                          Scene 관리
                         </Link>
                         <Link
                           href={storeUrl(unit.code)}
                           target="_blank"
                           className={`${styles.btn} ${styles.btnSecondary}`}
                         >
-                          보기
+                          전광판 보기
                         </Link>
                         <button
                           type="button"

@@ -12,6 +12,7 @@ import {
   resolveUnitId,
 } from "./display-units"
 import type { DisplaySceneView } from "@/lib/display/types"
+import { formatDuplicatedSceneName } from "@/lib/display/scene-list-ui"
 
 export type DisplayScene = {
   id: number
@@ -317,7 +318,7 @@ export function duplicateDisplayScene(id: number): DisplayScene | null {
 
   return createDisplayScene({
     display_unit_id: scene.display_unit_id,
-    name: `${scene.name} 복사본`,
+    name: formatDuplicatedSceneName(scene.name),
     mode: scene.mode,
     notice_id: scene.notice_id,
     media_full_file_id: scene.media_full_file_id,
@@ -325,6 +326,42 @@ export function duplicateDisplayScene(id: number): DisplayScene | null {
     media_right_file_id: scene.media_right_file_id,
     is_active: true,
   })
+}
+
+/**
+ * 활성 Scene의 sort_order만 일괄 갱신한다.
+ * 송출 상태(current_scene_id)는 변경하지 않는다.
+ */
+export function reorderDisplayScenes(
+  displayUnitId: number,
+  orderedIds: number[],
+): DisplaySceneView[] {
+  const active = listDisplayScenes(displayUnitId).filter(
+    (scene) => scene.is_active,
+  )
+  const activeIds = new Set(active.map((scene) => scene.id))
+
+  if (
+    orderedIds.length !== active.length ||
+    orderedIds.some((id) => !activeIds.has(id)) ||
+    new Set(orderedIds).size !== orderedIds.length
+  ) {
+    throw new Error("Scene 순서가 올바르지 않습니다.")
+  }
+
+  const run = getDb().transaction(() => {
+    const stmt = getDb().prepare(
+      `UPDATE display_scenes
+       SET sort_order = ?, updated_at = datetime('now')
+       WHERE id = ? AND display_unit_id = ?`,
+    )
+    orderedIds.forEach((id, index) => {
+      stmt.run(index + 1, id, displayUnitId)
+    })
+  })
+  run()
+
+  return listDisplayScenes(displayUnitId)
 }
 
 export function applyDisplayScene(id: number): DisplayScene {

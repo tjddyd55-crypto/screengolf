@@ -8,8 +8,6 @@ import styles from "../admin.module.css"
 const NAV_ITEMS: Array<{ href: string; label: string }> = [
   { href: "/admin", label: "관리자 홈" },
   { href: "/admin/display-units", label: "전광판 관리" },
-  { href: "/admin/display/display-1", label: "전광판 1 빠른 설정" },
-  { href: "/admin/display/display-2", label: "전광판 2 빠른 설정" },
   { href: "/admin/display-scenes/display-1", label: "전광판 1 Scene" },
   { href: "/admin/display-scenes/display-2", label: "전광판 2 Scene" },
   { href: "/admin/google-contacts", label: "고객 연락처" },
@@ -36,7 +34,7 @@ function resolvePageTitle(pathname: string): string {
     return "문자 발송"
   }
   if (pathname.startsWith("/admin/display-scenes/")) return "Scene 관리"
-  if (pathname.startsWith("/admin/display/")) return "전광판 빠른 설정"
+  if (pathname.startsWith("/admin/display/")) return "Scene 관리"
   if (pathname.startsWith("/admin/display-units")) return "전광판 관리"
   if (pathname.startsWith("/admin/google-contacts")) return "고객 연락처"
   if (pathname.startsWith("/admin/members")) return "회원관리"

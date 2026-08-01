@@ -102,8 +102,11 @@ describe("display units multi-instance", () => {
 
     const state1 = api.resolveDisplayState()
     const state2 = api.resolveDisplayState("display-2")
-    expect(state1.mode).toBe("ranking")
+    // Scene-only: current_scene_id 없으면 WAITING (raw mode만으로 송출하지 않음)
+    expect(state1.mode).toBe("off")
+    expect(state1.broadcastStatus).toBe("WAITING")
     expect(state2.mode).toBe("ranking")
+    expect(state2.broadcastStatus).toBe("BROADCASTING")
   })
 
   it("rejects soft-delete of display-1", async () => {

@@ -2076,3 +2076,268 @@
     grid-row: 1;
   }
 }
+
+/* ========== Scene 관리 UX ========== */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.sceneToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 16px;
+}
+
+.sceneCounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: #cbd5e1;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sceneSearchLabel {
+  flex: 1 1 220px;
+  max-width: 360px;
+  margin: 0;
+}
+
+.sceneSearchInput {
+  width: 100%;
+}
+
+.sceneCurrentSection {
+  margin: 0 0 16px;
+  padding: 12px 14px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.sceneCurrentSectionLabel {
+  margin: 0 0 10px;
+  color: #86efac;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sceneCurrentSectionName {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.sceneRestSectionLabel {
+  margin: 0 0 10px;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sceneEmptyState {
+  text-align: center;
+  padding: 48px 24px;
+}
+
+.sceneEmptyTitle {
+  margin: 0 0 8px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #f8fafc;
+}
+
+.sceneEmptyDesc {
+  margin: 0 0 20px;
+  color: #94a3b8;
+  font-size: 15px;
+}
+
+.sceneCard {
+  position: relative;
+  overflow: hidden;
+  transition:
+    border-color 0.25s ease,
+    background-color 0.25s ease,
+    box-shadow 0.25s ease,
+    opacity 0.25s ease;
+}
+
+.sceneCardCurrent {
+  padding-left: 18px;
+}
+
+.sceneCardCurrent::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: #22c55e;
+}
+
+.sceneCardCurrent .sceneCardTitle {
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.sceneCardDragOver {
+  outline: 2px dashed rgba(56, 189, 248, 0.8);
+  outline-offset: 2px;
+}
+
+.sceneCardToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.sceneDragHandle {
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(15, 23, 42, 0.55);
+  color: #e2e8f0;
+  cursor: grab;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.sceneDragHandle:active {
+  cursor: grabbing;
+}
+
+.sceneDragHandle:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+.sceneCardPreview {
+  margin-bottom: 12px;
+  width: 100%;
+  min-height: 150px;
+  max-height: 180px;
+}
+
+.sceneCardPreview :global(.frame),
+.sceneCardPreview > * {
+  width: 100%;
+  max-height: 180px;
+}
+
+.sceneTitleRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+}
+
+.sceneCardTitle {
+  flex: 1;
+  margin: 0;
+  word-break: break-word;
+}
+
+.sceneRenameButton {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.sceneRenameButton:hover,
+.sceneRenameButton:focus-visible {
+  background: rgba(148, 163, 184, 0.16);
+}
+
+.sceneRenameInput {
+  width: 100%;
+  margin: 0;
+}
+
+.sceneCardActions {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sceneCardActionsRow,
+.sceneCardActionsRowSecondary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.sceneCardActionsRowSecondary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.sceneCardActions .btn {
+  min-height: 40px;
+  height: 40px;
+  width: 100%;
+  padding: 0 10px;
+}
+
+@media (max-width: 768px) {
+  .sceneToolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sceneSearchLabel {
+    max-width: none;
+    width: 100%;
+  }
+
+  .sceneCardActionsRow,
+  .sceneCardActionsRowSecondary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sceneCardActionsRow .btn:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .sceneCardPreview {
+    max-height: none;
+  }
+
+  .sceneCardPreview :global(.frame),
+  .sceneCardPreview > * {
+    max-height: none;
+  }
+
+  .sceneCardActions .btn {
+    width: 100%;
+    min-height: 40px;
+  }
+}
+

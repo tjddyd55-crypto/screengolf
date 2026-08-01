@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 
-/** 기존 경로 → Display Unit 1 */
+/** 레거시 빠른 설정 → Scene 관리 */
 export default function AdminDisplayRedirectPage() {
-  redirect("/admin/display/display-1")
+  redirect("/admin/display-scenes/display-1")
 }

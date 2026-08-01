@@ -1,6 +1,15 @@
 "use client"
 
-import { FormEvent, use, useCallback, useEffect, useMemo, useState } from "react"
+import {
+  FormEvent,
+  use,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+} from "react"
 import Link from "next/link"
 import styles from "../../../admin.module.css"
 import {
@@ -8,11 +17,22 @@ import {
   type DisplayMode,
 } from "@/lib/admin/constants"
 import ScenePreviewFrame from "@/components/display/ScenePreviewFrame"
+import SceneManageCard, {
+  type SceneCardData,
+} from "@/components/admin/SceneManageCard"
 import {
   getBroadcastStatusHint,
   getBroadcastStatusLabel,
   type DisplayBroadcastStatus,
 } from "@/lib/display/broadcast-state"
+import {
+  filterScenesByName,
+  getSceneListCounts,
+  mergeReorderWithPinnedCurrent,
+  moveSceneId,
+  partitionScenesForDisplay,
+  sortScenesForDisplay,
+} from "@/lib/display/scene-list-ui"
 
 type DisplayAsset = {
   id: number
@@ -30,22 +50,14 @@ type DisplayAsset = {
   status?: string
 }
 
-type DisplayScene = {
-  id: number
-  name: string
-  mode: DisplayMode
+type DisplayScene = SceneCardData & {
   notice_id: number | null
   media_full_file_id: number | null
   media_left_file_id: number | null
   media_right_file_id: number | null
   sort_order: number
   is_active: boolean
-  is_current: boolean
-  notice_title: string | null
   summary: string
-  media_full_asset: DisplayAsset | null
-  media_left_asset: DisplayAsset | null
-  media_right_asset: DisplayAsset | null
 }
 
 type NoticeOption = {
@@ -94,46 +106,16 @@ function assetLabel(asset: DisplayAsset): string {
   return `${displayName}${originalHint}${format ? ` · ${format}` : ""}${size}${status}`
 }
 
-function displayFileName(asset: DisplayAsset | null | undefined): string {
-  if (!asset) return ""
-  const title = (asset.title || "").trim()
-  const original = (
-    asset.original_name ||
-    asset.originalName ||
-    ""
-  ).trim()
-  // title → original_name → id fallback (stored filename 기본 표시 금지)
-  return title || original || `파일 #${asset.id}`
-}
-
-function sceneConnectedFiles(scene: DisplayScene): {
-  text: string
-  title: string
-} | null {
-  if (scene.mode === "media_full" && scene.media_full_asset) {
-    const name = displayFileName(scene.media_full_asset)
-    return { text: name, title: name }
-  }
-
-  if (scene.mode === "media_split") {
-    const left = displayFileName(scene.media_left_asset)
-    const right = displayFileName(scene.media_right_asset)
-    const parts = [
-      left ? `좌: ${left}` : null,
-      right ? `우: ${right}` : null,
-    ].filter(Boolean)
-    if (parts.length === 0) return null
-    return { text: parts.join("  "), title: parts.join(" / ") }
-  }
-
-  if (scene.mode === "notice" && scene.notice_title) {
-    return { text: scene.notice_title, title: scene.notice_title }
-  }
-
-  return null
-}
-
-function isAssetMissing(asset: DisplayAsset | null | undefined): boolean {
+function isAssetMissing(
+  asset:
+    | {
+        file_missing?: boolean
+        fileMissing?: boolean
+        status?: string
+      }
+    | null
+    | undefined,
+): boolean {
   if (!asset) return true
   return Boolean(asset.file_missing || asset.fileMissing || asset.status === "missing")
 }
@@ -145,7 +127,15 @@ type PageProps = {
 export default function AdminDisplayScenesPage({ params }: PageProps) {
   const { unitCode } = use(params)
   const scenesApi = `/api/admin/display-units/${encodeURIComponent(unitCode)}/scenes`
-  const displayHref = `/admin/display/${encodeURIComponent(unitCode)}`
+  const reorderApi = `${scenesApi}/reorder`
+  const clearCurrentApi = `/api/admin/display-units/${encodeURIComponent(unitCode)}/clear-current`
+  const settingsApi = `/api/admin/display-units/${encodeURIComponent(unitCode)}/settings`
+  const storeHref =
+    unitCode === "display-1"
+      ? "/store/monthly-ranking-display"
+      : unitCode === "display-2"
+        ? "/store/monthly-ranking-display-2"
+        : `/store/display/${encodeURIComponent(unitCode)}`
 
   const [scenes, setScenes] = useState<DisplayScene[]>([])
   const [assets, setAssets] = useState<DisplayAsset[]>([])
@@ -158,6 +148,13 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [renamingId, setRenamingId] = useState<number | null>(null)
+  const [renameValue, setRenameValue] = useState("")
+  const [draggingId, setDraggingId] = useState<number | null>(null)
+  const [dragOverId, setDragOverId] = useState<number | null>(null)
+  const [showClearModal, setShowClearModal] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [broadcastStatus, setBroadcastStatus] =
     useState<DisplayBroadcastStatus>("WAITING")
   const [broadcastLabel, setBroadcastLabel] = useState("적용된 화면 없음")
@@ -168,46 +165,50 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
     null,
   )
 
-  const settingsApi = `/api/admin/display-units/${encodeURIComponent(unitCode)}/settings`
+  const loadData = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!options?.silent) setLoading(true)
+      try {
+        const [scenesRes, assetsRes, noticesRes, settingsRes] =
+          await Promise.all([
+            fetch(scenesApi),
+            fetch("/api/admin/display-assets"),
+            fetch("/api/admin/notices"),
+            fetch(settingsApi),
+          ])
 
-  const loadData = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [scenesRes, assetsRes, noticesRes, settingsRes] = await Promise.all([
-        fetch(scenesApi),
-        fetch("/api/admin/display-assets"),
-        fetch("/api/admin/notices"),
-        fetch(settingsApi),
-      ])
-
-      const scenesJson = (await scenesRes.json()) as { data?: DisplayScene[] }
-      const assetsJson = (await assetsRes.json()) as { data?: DisplayAsset[] }
-      const noticesJson = (await noticesRes.json()) as { data?: NoticeOption[] }
-      const settingsJson = (await settingsRes.json()) as {
-        data?: {
-          broadcast_status?: DisplayBroadcastStatus
-          broadcast_label?: string
-          current_scene_name?: string | null
-          mode_label?: string | null
+        const scenesJson = (await scenesRes.json()) as { data?: DisplayScene[] }
+        const assetsJson = (await assetsRes.json()) as { data?: DisplayAsset[] }
+        const noticesJson = (await noticesRes.json()) as {
+          data?: NoticeOption[]
         }
-      }
+        const settingsJson = (await settingsRes.json()) as {
+          data?: {
+            broadcast_status?: DisplayBroadcastStatus
+            broadcast_label?: string
+            current_scene_name?: string | null
+            mode_label?: string | null
+          }
+        }
 
-      setScenes(scenesJson.data ?? [])
-      setAssets(assetsJson.data ?? [])
-      setNotices(noticesJson.data ?? [])
-      const status = settingsJson.data?.broadcast_status ?? "WAITING"
-      setBroadcastStatus(status)
-      setBroadcastLabel(
-        settingsJson.data?.broadcast_label ?? getBroadcastStatusLabel(status),
-      )
-      setBroadcastSceneName(settingsJson.data?.current_scene_name ?? null)
-      setBroadcastModeLabel(settingsJson.data?.mode_label ?? null)
-    } catch {
-      setError("Scene 목록을 불러오지 못했습니다.")
-    } finally {
-      setLoading(false)
-    }
-  }, [scenesApi, settingsApi])
+        setScenes(scenesJson.data ?? [])
+        setAssets(assetsJson.data ?? [])
+        setNotices(noticesJson.data ?? [])
+        const status = settingsJson.data?.broadcast_status ?? "WAITING"
+        setBroadcastStatus(status)
+        setBroadcastLabel(
+          settingsJson.data?.broadcast_label ?? getBroadcastStatusLabel(status),
+        )
+        setBroadcastSceneName(settingsJson.data?.current_scene_name ?? null)
+        setBroadcastModeLabel(settingsJson.data?.mode_label ?? null)
+      } catch {
+        setError("Scene 목록을 불러오지 못했습니다.")
+      } finally {
+        if (!options?.silent) setLoading(false)
+      }
+    },
+    [scenesApi, settingsApi],
+  )
 
   useEffect(() => {
     loadData()
@@ -222,10 +223,32 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
     () =>
       assets.filter(
         (asset) =>
-          asset.layout_type === "split_left" || asset.layout_type === "split_right",
+          asset.layout_type === "split_left" ||
+          asset.layout_type === "split_right",
       ),
     [assets],
   )
+
+  const { current: currentScene, rest: restScenes } = useMemo(
+    () => partitionScenesForDisplay(scenes),
+    [scenes],
+  )
+
+  const displayScenes = useMemo(
+    () => sortScenesForDisplay(scenes),
+    [scenes],
+  )
+
+  const searching = Boolean(searchQuery.trim())
+
+  const filteredScenes = useMemo(
+    () => filterScenesByName(displayScenes, searchQuery),
+    [displayScenes, searchQuery],
+  )
+
+  const counts = useMemo(() => getSceneListCounts(scenes), [scenes])
+
+  const listScenes = searching ? filteredScenes : restScenes
 
   function openCreateModal() {
     setEditingId(null)
@@ -235,23 +258,25 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
     setError("")
   }
 
-  function openEditModal(scene: DisplayScene) {
-    setEditingId(scene.id)
+  function openEditModal(scene: DisplayScene | SceneCardData) {
+    const full = scenes.find((item) => item.id === scene.id)
+    if (!full) return
+    setEditingId(full.id)
     setForm({
-      name: scene.name,
-      mode: scene.mode,
-      notice_id: scene.notice_id ? String(scene.notice_id) : "",
-      media_full_file_id: scene.media_full_file_id
-        ? String(scene.media_full_file_id)
+      name: full.name,
+      mode: full.mode,
+      notice_id: full.notice_id ? String(full.notice_id) : "",
+      media_full_file_id: full.media_full_file_id
+        ? String(full.media_full_file_id)
         : "",
-      media_left_file_id: scene.media_left_file_id
-        ? String(scene.media_left_file_id)
+      media_left_file_id: full.media_left_file_id
+        ? String(full.media_left_file_id)
         : "",
-      media_right_file_id: scene.media_right_file_id
-        ? String(scene.media_right_file_id)
+      media_right_file_id: full.media_right_file_id
+        ? String(full.media_right_file_id)
         : "",
-      sort_order: String(scene.sort_order),
-      is_active: scene.is_active,
+      sort_order: String(full.sort_order),
+      is_active: full.is_active,
     })
     setShowModal(true)
     setMessage("")
@@ -295,8 +320,7 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
     (form.mode === "media_split" &&
       (isAssetMissing(selectedLeftAsset) || isAssetMissing(selectedRightAsset)))
 
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault()
+  async function saveScene(applyAfter: boolean) {
     setMessage("")
     setError("")
 
@@ -305,40 +329,104 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
       return
     }
 
+    if (!form.name.trim()) {
+      setError("Scene 이름은 필수입니다.")
+      return
+    }
+
+    setSaving(true)
     try {
       const res = await fetch(
-        editingId
-          ? `/api/admin/display-scenes/${editingId}`
-          : scenesApi,
+        editingId ? `/api/admin/display-scenes/${editingId}` : scenesApi,
         {
           method: editingId ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(buildPayload()),
         },
       )
-      const json = (await res.json()) as { success?: boolean; error?: string }
+      const json = (await res.json()) as {
+        success?: boolean
+        error?: string
+        data?: { id: number; name?: string }
+      }
 
-      if (!res.ok || !json.success) {
+      if (!res.ok || !json.success || !json.data?.id) {
         setError(json.error ?? "저장에 실패했습니다.")
         return
       }
 
+      const savedId = json.data.id
+      const savedName = json.data.name ?? form.name
+
+      if (applyAfter) {
+        const applyRes = await fetch(
+          `/api/admin/display-scenes/${savedId}/apply`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ unitCode }),
+          },
+        )
+        const applyJson = (await applyRes.json()) as {
+          success?: boolean
+          error?: string
+        }
+        if (!applyRes.ok || !applyJson.success) {
+          setShowModal(false)
+          setError(
+            applyJson.error ??
+              "Scene은 저장되었지만 적용에 실패했습니다. 목록에서 다시 적용해 주세요.",
+          )
+          await loadData({ silent: true })
+          return
+        }
+        setMessage(`'${savedName}' Scene을 저장하고 적용했습니다.`)
+      } else {
+        setMessage(
+          editingId
+            ? "Scene이 수정되었습니다. (송출 상태는 변경되지 않았습니다.)"
+            : "Scene이 생성되었습니다. (송출 상태는 변경되지 않았습니다.)",
+        )
+      }
+
       setShowModal(false)
-      setMessage(editingId ? "Scene이 수정되었습니다." : "Scene이 생성되었습니다.")
-      await loadData()
+      await loadData({ silent: true })
     } catch {
       setError("저장 중 오류가 발생했습니다.")
+    } finally {
+      setSaving(false)
     }
   }
 
-  async function handleApply(scene: DisplayScene) {
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    await saveScene(false)
+  }
+
+  async function handleClearCurrent() {
+    setError("")
+    const res = await fetch(clearCurrentApi, { method: "POST" })
+    const json = (await res.json()) as { success?: boolean; error?: string }
+    if (!res.ok || !json.success) {
+      setError(json.error ?? "현재 화면 해제에 실패했습니다.")
+      return
+    }
+    setShowClearModal(false)
+    setMessage("현재 적용 화면을 해제했습니다. Scene과 파일은 유지됩니다.")
+    await loadData({ silent: true })
+  }
+
+  async function handleApply(scene: SceneCardData) {
     setError("")
 
+    const full = scenes.find((item) => item.id === scene.id)
+    if (!full) return
+
     if (
-      (scene.mode === "media_full" && isAssetMissing(scene.media_full_asset)) ||
-      (scene.mode === "media_split" &&
-        (isAssetMissing(scene.media_left_asset) ||
-          isAssetMissing(scene.media_right_asset)))
+      (full.mode === "media_full" && isAssetMissing(full.media_full_asset)) ||
+      (full.mode === "media_split" &&
+        (isAssetMissing(full.media_left_asset) ||
+          isAssetMissing(full.media_right_asset)))
     ) {
       setError("선택한 파일을 불러올 수 없어 전광판에 적용할 수 없습니다.")
       return
@@ -351,11 +439,11 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
           ? "전광판 2"
           : unitCode
     const confirmed = window.confirm(
-      `'${scene.name}' Scene을 ${unitLabel}에 적용할까요?\n\n다른 전광판 화면에는 영향을 주지 않습니다.\n${unitLabel}는 최대 30초 이내에 전환됩니다.`,
+      `'${full.name}' Scene을 ${unitLabel}에 적용할까요?\n\n다른 전광판 화면에는 영향을 주지 않습니다.\n${unitLabel}는 최대 30초 이내에 전환됩니다.`,
     )
     if (!confirmed) return
 
-    const res = await fetch(`/api/admin/display-scenes/${scene.id}/apply`, {
+    const res = await fetch(`/api/admin/display-scenes/${full.id}/apply`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ unitCode }),
@@ -368,9 +456,9 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
     }
 
     setMessage(
-      `${unitLabel}에 '${scene.name}' 화면을 적용했습니다. 최대 30초 이내에 반영됩니다.`,
+      `${unitLabel}에 '${full.name}' 화면을 적용했습니다. 최대 30초 이내에 반영됩니다.`,
     )
-    await loadData()
+    await loadData({ silent: true })
   }
 
   async function handleDuplicate(id: number) {
@@ -378,7 +466,11 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
     const res = await fetch(`/api/admin/display-scenes/${id}/duplicate`, {
       method: "POST",
     })
-    const json = (await res.json()) as { success?: boolean; error?: string }
+    const json = (await res.json()) as {
+      success?: boolean
+      error?: string
+      data?: DisplayScene
+    }
 
     if (!res.ok || !json.success) {
       setError(json.error ?? "복제에 실패했습니다.")
@@ -386,11 +478,15 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
     }
 
     setMessage("Scene이 복제되었습니다.")
-    await loadData()
+    await loadData({ silent: true })
   }
 
   async function handleDeactivate(id: number) {
-    if (!window.confirm("이 Scene을 비활성 처리하시겠습니까?")) return
+    const target = scenes.find((scene) => scene.id === id)
+    const confirmMessage = target?.is_current
+      ? "현재 적용 중인 Scene을 비활성화하면 전광판이 적용된 화면 없음 상태로 변경됩니다."
+      : "이 Scene을 비활성 처리하시겠습니까?"
+    if (!window.confirm(confirmMessage)) return
 
     setError("")
     const res = await fetch(`/api/admin/display-scenes/${id}`, {
@@ -404,15 +500,177 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
     }
 
     setMessage("Scene이 비활성 처리되었습니다.")
-    await loadData()
+    await loadData({ silent: true })
+  }
+
+  function startRename(scene: SceneCardData) {
+    setRenamingId(scene.id)
+    setRenameValue(scene.name)
+  }
+
+  async function commitRename() {
+    if (renamingId == null) return
+    const targetId = renamingId
+    const nextName = renameValue.trim()
+    if (!nextName) {
+      setError("Scene 이름은 비울 수 없습니다.")
+      setRenamingId(null)
+      return
+    }
+
+    const current = scenes.find((scene) => scene.id === targetId)
+    if (!current || current.name === nextName) {
+      setRenamingId(null)
+      return
+    }
+
+    setError("")
+    const res = await fetch(`/api/admin/display-scenes/${targetId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: nextName }),
+    })
+    const json = (await res.json()) as { success?: boolean; error?: string }
+
+    setRenamingId(null)
+    if (!res.ok || !json.success) {
+      setError(json.error ?? "이름 변경에 실패했습니다.")
+      return
+    }
+
+    setScenes((prev) =>
+      prev.map((scene) =>
+        scene.id === targetId ? { ...scene, name: nextName } : scene,
+      ),
+    )
+    setMessage("Scene 이름이 변경되었습니다.")
+  }
+
+  function handleRenameKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault()
+      void commitRename()
+    }
+    if (event.key === "Escape") {
+      event.preventDefault()
+      setRenamingId(null)
+    }
+  }
+
+  async function persistOrder(orderedIds: number[]) {
+    setError("")
+    const previous = scenes
+    setScenes((prev) =>
+      prev.map((scene) => {
+        const index = orderedIds.indexOf(scene.id)
+        if (index < 0) return scene
+        return { ...scene, sort_order: index + 1 }
+      }),
+    )
+
+    const res = await fetch(reorderApi, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ordered_ids: orderedIds }),
+    })
+    const json = (await res.json()) as {
+      success?: boolean
+      error?: string
+      data?: DisplayScene[]
+    }
+
+    if (!res.ok || !json.success) {
+      setScenes(previous)
+      setError(json.error ?? "순서 저장에 실패했습니다.")
+      return
+    }
+
+    if (json.data) setScenes(json.data)
+  }
+
+  function handleDragStart(event: DragEvent<HTMLElement>, sceneId: number) {
+    if (searching) {
+      event.preventDefault()
+      return
+    }
+    setDraggingId(sceneId)
+    event.dataTransfer.effectAllowed = "move"
+    event.dataTransfer.setData("text/plain", String(sceneId))
+  }
+
+  function handleDragOver(event: DragEvent<HTMLElement>, sceneId: number) {
+    if (searching) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = "move"
+    if (dragOverId !== sceneId) setDragOverId(sceneId)
+  }
+
+  function handleDragLeave(sceneId: number) {
+    if (dragOverId === sceneId) setDragOverId(null)
+  }
+
+  async function handleDrop(event: DragEvent<HTMLElement>, targetId: number) {
+    event.preventDefault()
+    if (searching) {
+      setDragOverId(null)
+      setDraggingId(null)
+      return
+    }
+    const sourceId = Number(
+      event.dataTransfer.getData("text/plain") || draggingId || "",
+    )
+    setDragOverId(null)
+    setDraggingId(null)
+    if (!sourceId || sourceId === targetId) return
+
+    const restIds = restScenes.map((scene) => scene.id)
+    const fromIndex = restIds.indexOf(sourceId)
+    const toIndex = restIds.indexOf(targetId)
+    if (fromIndex < 0 || toIndex < 0) return
+
+    const nextRestIds = moveSceneId(restIds, fromIndex, toIndex)
+    const previousFull = displayScenes.map((scene) => scene.id)
+    const fullIds = mergeReorderWithPinnedCurrent(
+      previousFull,
+      currentScene?.id ?? null,
+      nextRestIds,
+    )
+    await persistOrder(fullIds)
+  }
+
+  function handleDragEnd() {
+    setDraggingId(null)
+    setDragOverId(null)
+  }
+
+  async function handleHandleKeyDown(
+    event: KeyboardEvent<HTMLButtonElement>,
+    sceneId: number,
+  ) {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return
+    if (searching) return
+    event.preventDefault()
+
+    const restIds = restScenes.map((scene) => scene.id)
+    const index = restIds.indexOf(sceneId)
+    if (index < 0) return
+    const targetIndex = event.key === "ArrowUp" ? index - 1 : index + 1
+    if (targetIndex < 0 || targetIndex >= restIds.length) return
+
+    const nextRestIds = moveSceneId(restIds, index, targetIndex)
+    const previousFull = displayScenes.map((scene) => scene.id)
+    await persistOrder(
+      mergeReorderWithPinnedCurrent(
+        previousFull,
+        currentScene?.id ?? null,
+        nextRestIds,
+      ),
+    )
   }
 
   if (loading) {
     return <p>불러오는 중...</p>
   }
-
-  const activeScenes = scenes.filter((scene) => scene.is_active)
-  const currentScene = activeScenes.find((scene) => scene.is_current)
 
   const bannerClass =
     broadcastStatus === "BROADCASTING"
@@ -438,10 +696,11 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
         <h2 className={styles.pageTitle}>Scene 관리 · {unitCode}</h2>
         <div className={styles.buttonRow}>
           <Link
-            href={displayHref}
+            href={storeHref}
+            target="_blank"
             className={`${styles.btn} ${styles.btnSecondary}`}
           >
-            빠른 설정
+            전광판 보기
           </Link>
           <button
             type="button"
@@ -477,113 +736,142 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
                 : null)}
           </p>
         ) : null}
+        {broadcastStatus === "BROADCASTING" ? (
+          <div className={styles.broadcastBannerActions}>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnSecondary}`}
+              onClick={() => setShowClearModal(true)}
+            >
+              현재 화면 해제
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <div className={styles.sceneToolbar}>
+        <div className={styles.sceneCounts}>
+          <span>Scene {counts.totalActive}개</span>
+          <span>현재 송출중 {counts.currentCount}개</span>
+        </div>
+        <label className={styles.sceneSearchLabel}>
+          <span className={styles.srOnly}>Scene 검색</span>
+          <input
+            className={`${styles.formInput} ${styles.sceneSearchInput}`}
+            type="search"
+            placeholder="Scene 이름 검색"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            aria-label="Scene 이름 검색"
+          />
+        </label>
       </div>
 
       {message ? (
-        <div className={`${styles.message} ${styles.messageSuccess}`}>{message}</div>
+        <div className={`${styles.message} ${styles.messageSuccess}`}>
+          {message}
+        </div>
       ) : null}
       {error ? (
         <div className={`${styles.message} ${styles.messageError}`}>{error}</div>
       ) : null}
 
-      {activeScenes.length === 0 ? (
-        <div className={styles.panel}>
-          <p>
-            등록된 Scene이 없습니다. Scene을 생성하거나 빠른 설정에서 화면을
-            선택하세요.
-          </p>
+      {counts.totalActive === 0 ? (
+        <div className={`${styles.panel} ${styles.sceneEmptyState}`}>
+          <p className={styles.sceneEmptyTitle}>Scene가 없습니다.</p>
+          <p className={styles.sceneEmptyDesc}>첫 Scene을 만들어보세요.</p>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={openCreateModal}
+          >
+            + Scene 만들기
+          </button>
+        </div>
+      ) : searching && filteredScenes.length === 0 ? (
+        <div className={`${styles.panel} ${styles.sceneEmptyState}`}>
+          <p className={styles.sceneEmptyTitle}>검색 결과가 없습니다.</p>
         </div>
       ) : (
-        <div className={styles.sceneGrid}>
-          {activeScenes.map((scene) => {
-            const connected = sceneConnectedFiles(scene)
-            return (
-              <div
-                key={scene.id}
-                className={`${styles.card} ${styles.cardStatic} ${
-                  scene.is_current ? styles.cardApplied : ""
-                }`}
-              >
-                <div className={styles.cardHeader}>
-                  <h3 className={styles.cardTitle} title={scene.name}>
-                    {scene.name}
-                  </h3>
-                  {scene.is_current ? (
-                    <span className={`${styles.badge} ${styles.badgeApplied}`}>
-                      현재 적용 중
-                    </span>
-                  ) : null}
-                </div>
-                {scene.is_current ? (
-                  <p className={styles.modeCheckMark}>✓ 현재 적용 중</p>
-                ) : null}
-                <p className={`${styles.cardDesc} ${styles.cardDescCompact}`}>
-                  {DISPLAY_MODE_LABELS[scene.mode]}
-                </p>
-                {connected ? (
-                  <p className={styles.cardMeta} title={connected.title}>
-                    {connected.text}
-                  </p>
-                ) : (
-                  <p className={styles.cardMeta}>&nbsp;</p>
-                )}
-
-                <div className={styles.cardPreview}>
-                  <ScenePreviewFrame
-                    mode={scene.mode}
-                    fullAsset={scene.media_full_asset}
-                    leftAsset={scene.media_left_asset}
-                    rightAsset={scene.media_right_asset}
-                    noticeTitle={scene.notice_title}
-                  />
-                </div>
-
-                <div className={styles.cardActions}>
-                  <div className={styles.cardActionsPrimary}>
-                    <button
-                      type="button"
-                      className={`${styles.btn} ${styles.btnPrimary}`}
-                      disabled={scene.is_current}
-                      onClick={() => handleApply(scene)}
-                    >
-                      {scene.is_current ? "적용 중" : "적용"}
-                    </button>
-                    <button
-                      type="button"
-                      className={`${styles.btn} ${styles.btnSecondary}`}
-                      onClick={() => setPreviewScene(scene)}
-                    >
-                      미리보기
-                    </button>
-                    <button
-                      type="button"
-                      className={`${styles.btn} ${styles.btnSecondary}`}
-                      onClick={() => openEditModal(scene)}
-                    >
-                      수정
-                    </button>
-                  </div>
-                  <div className={styles.cardActionsSecondary}>
-                    <button
-                      type="button"
-                      className={`${styles.btn} ${styles.btnSecondary}`}
-                      onClick={() => handleDuplicate(scene.id)}
-                    >
-                      복제
-                    </button>
-                    <button
-                      type="button"
-                      className={`${styles.btn} ${styles.btnDanger}`}
-                      onClick={() => handleDeactivate(scene.id)}
-                    >
-                      비활성
-                    </button>
-                  </div>
-                </div>
+        <>
+          {!searching && currentScene ? (
+            <div className={styles.sceneCurrentSection}>
+              <p className={styles.sceneCurrentSectionLabel}>현재 적용</p>
+              <div className={styles.sceneGrid}>
+                <SceneManageCard
+                  scene={currentScene}
+                  renaming={renamingId === currentScene.id}
+                  renameValue={renameValue}
+                  dragOver={false}
+                  reorderEnabled={false}
+                  onDragStart={handleDragStart}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onDragEnd={handleDragEnd}
+                  onHandleKeyDown={handleHandleKeyDown}
+                  onStartRename={startRename}
+                  onRenameChange={setRenameValue}
+                  onRenameKeyDown={handleRenameKeyDown}
+                  onRenameBlur={() => {
+                    void commitRename()
+                  }}
+                  onApply={handleApply}
+                  onDuplicate={handleDuplicate}
+                  onEdit={openEditModal}
+                  onDeactivate={handleDeactivate}
+                  onPreview={(item) => {
+                    const full = scenes.find(
+                      (sceneItem) => sceneItem.id === item.id,
+                    )
+                    if (full) setPreviewScene(full)
+                  }}
+                />
               </div>
-            )
-          })}
-        </div>
+            </div>
+          ) : null}
+          {listScenes.length > 0 ? (
+            <>
+              {!searching && restScenes.length > 0 ? (
+                <p className={styles.sceneRestSectionLabel}>다른 Scene</p>
+              ) : null}
+              <div className={styles.sceneGrid}>
+                {listScenes.map((scene) => (
+                  <SceneManageCard
+                    key={scene.id}
+                    scene={scene}
+                    renaming={renamingId === scene.id}
+                    renameValue={renameValue}
+                    dragOver={dragOverId === scene.id}
+                    reorderEnabled={!searching && !scene.is_current}
+                    onDragStart={handleDragStart}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onDragEnd={handleDragEnd}
+                    onHandleKeyDown={handleHandleKeyDown}
+                    onStartRename={startRename}
+                    onRenameChange={setRenameValue}
+                    onRenameKeyDown={handleRenameKeyDown}
+                    onRenameBlur={() => {
+                      void commitRename()
+                    }}
+                    onApply={handleApply}
+                    onDuplicate={handleDuplicate}
+                    onEdit={openEditModal}
+                    onDeactivate={handleDeactivate}
+                    onPreview={(item) => {
+                      const full = scenes.find(
+                        (sceneItem) => sceneItem.id === item.id,
+                      )
+                      if (full) setPreviewScene(full)
+                    }}
+                  />
+                ))}
+              </div>
+            </>
+          ) : null}
+        </>
       )}
 
       {showModal ? (
@@ -686,7 +974,10 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
                       className={styles.formSelect}
                       value={form.media_right_file_id}
                       onChange={(e) =>
-                        setForm({ ...form, media_right_file_id: e.target.value })
+                        setForm({
+                          ...form,
+                          media_right_file_id: e.target.value,
+                        })
                       }
                       required
                     >
@@ -723,7 +1014,9 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
                   type="number"
                   className={styles.formInput}
                   value={form.sort_order}
-                  onChange={(e) => setForm({ ...form, sort_order: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, sort_order: e.target.value })
+                  }
                   placeholder="비워두면 마지막 순서"
                 />
               </div>
@@ -741,25 +1034,37 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
               </div>
               <div className={styles.buttonRow}>
                 <button
-                  type="submit"
-                  className={`${styles.btn} ${styles.btnPrimary}`}
-                  disabled={formMediaInvalid}
-                >
-                  저장
-                </button>
-                <button
                   type="button"
                   className={`${styles.btn} ${styles.btnSecondary}`}
-                  onClick={() => setShowFormPreview(true)}
-                >
-                  미리보기
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.btn} ${styles.btnSecondary}`}
+                  disabled={saving}
                   onClick={() => setShowModal(false)}
                 >
                   취소
+                </button>
+                <button
+                  type="submit"
+                  className={`${styles.btn} ${styles.btnSecondary}`}
+                  disabled={formMediaInvalid || saving}
+                >
+                  Scene 저장
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.btn} ${styles.btnPrimary}`}
+                  disabled={formMediaInvalid || saving}
+                  onClick={() => {
+                    void saveScene(true)
+                  }}
+                >
+                  저장 후 적용
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.btn} ${styles.btnSecondary}`}
+                  disabled={saving}
+                  onClick={() => setShowFormPreview(true)}
+                >
+                  미리보기
                 </button>
               </div>
             </form>
@@ -813,6 +1118,45 @@ export default function AdminDisplayScenesPage({ params }: PageProps) {
                 onClick={() => setShowFormPreview(false)}
               >
                 닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showClearModal ? (
+        <div
+          className={styles.modalOverlay}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="clear-current-title"
+        >
+          <div className={styles.modal}>
+            <h3 id="clear-current-title" className={styles.modalTitle}>
+              현재 적용 화면을 해제할까요?
+            </h3>
+            <p className={styles.cardDesc}>
+              전광판에는 적용된 화면이 없는 상태로 표시됩니다.
+            </p>
+            <p className={styles.cardDesc}>
+              Scene과 업로드 파일은 삭제되지 않습니다.
+            </p>
+            <div className={styles.buttonRow}>
+              <button
+                type="button"
+                className={`${styles.btn} ${styles.btnSecondary}`}
+                onClick={() => setShowClearModal(false)}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                className={`${styles.btn} ${styles.btnDanger}`}
+                onClick={() => {
+                  void handleClearCurrent()
+                }}
+              >
+                화면 해제
               </button>
             </div>
           </div>

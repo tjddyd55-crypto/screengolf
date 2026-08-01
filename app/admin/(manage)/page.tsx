@@ -191,14 +191,8 @@ export default function AdminHomePage() {
               <p className={styles.cardMeta}>{unit.code}</p>
               <div className={styles.cardActions}>
                 <Link
-                  href={`/admin/display/${unit.code}`}
-                  className={`${styles.btn} ${styles.btnSecondary}`}
-                >
-                  빠른 설정
-                </Link>
-                <Link
                   href={`/admin/display-scenes/${unit.code}`}
-                  className={`${styles.btn} ${styles.btnSecondary}`}
+                  className={`${styles.btn} ${styles.btnPrimary}`}
                 >
                   Scene 관리
                 </Link>

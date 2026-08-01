@@ -520,6 +520,20 @@ function initializeSchema(database: Database.Database): void {
   seedPlanTypes(database)
 
   migrateDisplaySettingsIfNeeded(database)
+
+  // Scene 시드가 current_scene_id를 갱신할 수 있도록 settings 행을 먼저 보장한다.
+  const existing = database
+    .prepare("SELECT id FROM display_settings WHERE id = 1")
+    .get()
+
+  if (!existing) {
+    database
+      .prepare(
+        "INSERT INTO display_settings (id, mode, active_notice_id) VALUES (1, 'ranking', NULL)",
+      )
+      .run()
+  }
+
   migrateDisplayScenesIfNeeded(database)
 
   const memberTable = database
@@ -536,18 +550,6 @@ function initializeSchema(database: Database.Database): void {
 
   migrateGoogleContactsIfNeeded(database)
   migrateStoreSmsIfNeeded(database)
-
-  const existing = database
-    .prepare("SELECT id FROM display_settings WHERE id = 1")
-    .get()
-
-  if (!existing) {
-    database
-      .prepare(
-        "INSERT INTO display_settings (id, mode, active_notice_id) VALUES (1, 'ranking', NULL)",
-      )
-      .run()
-  }
 
   // singleton seed 이후 Display Unit 이관 (idempotent)
   migrateDisplayUnitsIfNeeded(database)

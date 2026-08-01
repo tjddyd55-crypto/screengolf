@@ -185,15 +185,11 @@ export function updateDisplaySettings(
 
 /**
  * 현재 적용 Scene 참조를 해제한다.
+ * - Scene/asset/notice 행은 삭제하지 않는다.
  * - current_scene_id / media / notice 참조만 비운다.
- * - mode는 유지한다. 단 ranking은 콘텐츠 없이 BROADCASTING이 되므로
- *   스키마상 빈 상태(notice + 대상 없음)로만 정규화한다.
- *   (notice 송출이 아니라 WAITING을 위한 빈 상태)
+ * - mode는 WAITING용 빈 상태(notice)로 정규화한다.
  */
 export function clearCurrentAppliedScene(unitId: number): void {
-  const current = getDisplaySettings(unitId)
-  const nextMode = current.mode === "ranking" ? "notice" : current.mode
-
   getDb()
     .prepare(
       `UPDATE display_settings
@@ -202,9 +198,9 @@ export function clearCurrentAppliedScene(unitId: number): void {
            media_full_file_id = NULL,
            media_left_file_id = NULL,
            media_right_file_id = NULL,
-           mode = ?,
+           mode = 'notice',
            updated_at = datetime('now')
        WHERE display_unit_id = ?`,
     )
-    .run(nextMode, unitId)
+    .run(unitId)
 }

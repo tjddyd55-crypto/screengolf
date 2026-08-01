@@ -52,6 +52,11 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 }
 
+/**
+ * @deprecated Scene-only 운영 이후 관리자 UI는 호출하지 않는다.
+ * 하위 호환용으로 유지. direct mode PATCH는 current_scene_id를 null로 만들며
+ * 송출 SSOT는 Scene이 없으면 WAITING이다 (유효 ranking은 lazy migration 대상).
+ */
 export async function PATCH(request: Request, context: RouteContext) {
   try {
     const { code } = await context.params

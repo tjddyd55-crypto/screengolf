@@ -106,7 +106,7 @@ describe("broadcast state integration", () => {
     expect(api.getUnitBroadcastState(unit1.id).status).toBe("WAITING")
   })
 
-  it("does not re-apply null current_scene_id on startup", async () => {
+  it("does not re-apply null current_scene_id on startup migration", async () => {
     const api = await loadWithTempDb()
     const unit1 = api.getDisplayUnitByCode("display-1")!
     api.clearCurrentAppliedScene(unit1.id)
@@ -122,14 +122,19 @@ describe("broadcast state integration", () => {
     const sqlite = await import("@/lib/db/sqlite")
     const settings = await import("@/lib/db/display-settings")
     const broadcast = await import("@/lib/display/resolve-broadcast-state")
+    const migrate = await import("@/lib/display/migrate-direct-to-scene")
+    const startup = await import("@/lib/storage/display-startup")
     closeDbForTests = sqlite.closeDbForTests
     sqlite.getDb()
+    startup.resetDisplayStartupFlagsForTests()
+    startup.runDirectModeSceneMigrationOnce()
 
     const unit = (await import("@/lib/db/display-units")).getDisplayUnitByCode(
       "display-1",
     )!
     expect(settings.getDisplaySettings(unit.id).current_scene_id).toBeNull()
     expect(broadcast.getUnitBroadcastState(unit.id).status).toBe("WAITING")
+    expect(migrate.migrateAllDirectModesToScenes()).toBe(0)
   })
 
   it("WAITING display-state has no previous content payload", async () => {
@@ -163,17 +168,120 @@ describe("broadcast state integration", () => {
     expect(api.getUnitBroadcastState(u2.id).status).toBe("BROADCASTING")
   })
 
-  it("direct ranking quick setting becomes BROADCASTING", async () => {
+  it("getUnitBroadcastState is read-only and does not migrate", async () => {
     const api = await loadWithTempDb()
     const u1 = api.getDisplayUnitByCode("display-1")!
     api.clearCurrentAppliedScene(u1.id)
-    expect(api.getUnitBroadcastState(u1.id).status).toBe("WAITING")
-
     api.updateDisplaySettings(
       { mode: "ranking", current_scene_id: null },
       u1.id,
     )
-    expect(api.getUnitBroadcastState(u1.id).status).toBe("BROADCASTING")
+    const beforeScenes = api.listDisplayScenes(u1.id).length
+    expect(api.getUnitBroadcastState(u1.id).status).toBe("WAITING")
+    expect(api.getDisplaySettings(u1.id).current_scene_id).toBeNull()
+    expect(api.listDisplayScenes(u1.id)).toHaveLength(beforeScenes)
+  })
+
+  it("migrates valid direct ranking via startup migration", async () => {
+    const api = await loadWithTempDb()
+    const migrate = await import("@/lib/display/migrate-direct-to-scene")
+    const u1 = api.getDisplayUnitByCode("display-1")!
+    api.clearCurrentAppliedScene(u1.id)
+    api.updateDisplaySettings(
+      { mode: "ranking", current_scene_id: null },
+      u1.id,
+    )
+
+    expect(migrate.migrateDirectModeToSceneIfNeeded(u1.id)).toBe(true)
+    const state = api.getUnitBroadcastState(u1.id)
+    expect(state.status).toBe("BROADCASTING")
+    expect(state.reason).toBe("ACTIVE_SCENE")
+    expect(api.getDisplaySettings(u1.id).current_scene_id).not.toBeNull()
     expect(api.resolveDisplayState("display-1").mode).toBe("ranking")
+  })
+
+  it("migration is idempotent and does not duplicate scenes", async () => {
+    const api = await loadWithTempDb()
+    const migrate = await import("@/lib/display/migrate-direct-to-scene")
+    const u1 = api.getDisplayUnitByCode("display-1")!
+    api.clearCurrentAppliedScene(u1.id)
+    api.updateDisplaySettings(
+      { mode: "ranking", current_scene_id: null },
+      u1.id,
+    )
+
+    const before = api.listDisplayScenes(u1.id).length
+    expect(migrate.migrateDirectModeToSceneIfNeeded(u1.id)).toBe(true)
+    const afterFirst = api.listDisplayScenes(u1.id).length
+    // 기존 동일 콘텐츠 ranking Scene 재사용 → 개수 증가 없음
+    expect(afterFirst).toBe(before)
+
+    expect(migrate.migrateDirectModeToSceneIfNeeded(u1.id)).toBe(false)
+    expect(api.listDisplayScenes(u1.id)).toHaveLength(afterFirst)
+  })
+
+  it("does not re-apply after clear when migration marker exists", async () => {
+    const api = await loadWithTempDb()
+    const migrate = await import("@/lib/display/migrate-direct-to-scene")
+    const u1 = api.getDisplayUnitByCode("display-1")!
+    api.clearCurrentAppliedScene(u1.id)
+    api.updateDisplaySettings(
+      { mode: "ranking", current_scene_id: null },
+      u1.id,
+    )
+    expect(migrate.migrateDirectModeToSceneIfNeeded(u1.id)).toBe(true)
+    api.clearCurrentAppliedScene(u1.id)
+    api.updateDisplaySettings(
+      { mode: "ranking", current_scene_id: null },
+      u1.id,
+    )
+    expect(migrate.migrateDirectModeToSceneIfNeeded(u1.id)).toBe(false)
+    expect(api.getUnitBroadcastState(u1.id).status).toBe("WAITING")
+  })
+
+  it("skips migration when current_scene_id already set", async () => {
+    const api = await loadWithTempDb()
+    const migrate = await import("@/lib/display/migrate-direct-to-scene")
+    const u1 = api.getDisplayUnitByCode("display-1")!
+    const ranking = api.getRankingScene(u1.id)!
+    api.applyDisplayScene(ranking.id)
+    const before = api.listDisplayScenes(u1.id).length
+    expect(api.getDisplaySettings(u1.id).current_scene_id).toBe(ranking.id)
+    expect(migrate.migrateDirectModeToSceneIfNeeded(u1.id)).toBe(false)
+    expect(api.listDisplayScenes(u1.id)).toHaveLength(before)
+  })
+
+  it("does not migrate incomplete WAITING direct settings", async () => {
+    const api = await loadWithTempDb()
+    const migrate = await import("@/lib/display/migrate-direct-to-scene")
+    const u1 = api.getDisplayUnitByCode("display-1")!
+    api.clearCurrentAppliedScene(u1.id)
+    // mode=notice + no notice → not migratable
+    expect(migrate.isMigratableDirectSettings(api.getDisplaySettings(u1.id))).toBe(
+      false,
+    )
+    expect(migrate.migrateDirectModeToSceneIfNeeded(u1.id)).toBe(false)
+    expect(api.getUnitBroadcastState(u1.id).status).toBe("WAITING")
+  })
+
+  it("matches reusable scene by content ids, not by name alone", async () => {
+    const api = await loadWithTempDb()
+    const migrate = await import("@/lib/display/migrate-direct-to-scene")
+    const u1 = api.getDisplayUnitByCode("display-1")!
+    api.clearCurrentAppliedScene(u1.id)
+    api.updateDisplaySettings(
+      { mode: "ranking", current_scene_id: null },
+      u1.id,
+    )
+
+    // 같은 표시 이름이어도 mode/콘텐츠가 다르면 매칭되지 않음 → ranking 후보만 선택
+    const rankingMatch = migrate.findSceneMatchingDirectSettings(
+      u1.id,
+      api.getDisplaySettings(u1.id),
+    )
+    expect(rankingMatch).not.toBeNull()
+    expect(rankingMatch!.mode).toBe("ranking")
+    expect(rankingMatch!.notice_id).toBeNull()
+    expect(rankingMatch!.media_full_file_id).toBeNull()
   })
 })

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   evaluateBroadcastState,
   getBroadcastStatusLabel,
+  getBroadcastStatusHint,
   getBroadcastCardClass,
   type BroadcastSceneInput,
 } from "@/lib/display/broadcast-state"
@@ -53,7 +54,7 @@ function base(overrides: {
   })
 }
 
-describe("evaluateBroadcastState", () => {
+describe("evaluateBroadcastState (Scene-only)", () => {
   it("returns BROADCASTING for active scene with valid content", () => {
     const state = base({
       currentSceneId: 10,
@@ -65,13 +66,24 @@ describe("evaluateBroadcastState", () => {
     expect(state.currentSceneName).toBe("더위사냥")
   })
 
-  it("returns WAITING when current_scene_id is null and content incomplete", () => {
+  it("returns WAITING when current_scene_id is null", () => {
     const state = base({
-      mode: "notice",
+      mode: "ranking",
+      currentSceneId: null,
+      settingsProbe: probeOk,
+    })
+    expect(state.status).toBe("WAITING")
+    expect(state.reason).toBe("NO_CURRENT_SCENE")
+  })
+
+  it("raw mode=ranking without scene stays WAITING", () => {
+    const state = base({
+      mode: "ranking",
       currentSceneId: null,
       settingsProbe: probeEmpty,
     })
     expect(state.status).toBe("WAITING")
+    expect(state.reason).toBe("NO_CURRENT_SCENE")
   })
 
   it("returns WAITING when scene is missing", () => {
@@ -123,27 +135,17 @@ describe("evaluateBroadcastState", () => {
     expect(state.reason).toBe("ASSET_MISSING")
   })
 
-  it("returns WAITING when notice content missing", () => {
+  it("returns WAITING when notice content missing on scene", () => {
     const state = base({
-      mode: "notice",
-      currentSceneId: null,
-      settingsProbe: probeEmpty,
+      currentSceneId: 10,
+      currentScene: scene({ mode: "notice", notice_id: null }),
+      sceneProbe: probeEmpty,
     })
     expect(state.status).toBe("WAITING")
     expect(state.reason).toBe("NOTICE_MISSING")
   })
 
-  it("returns BROADCASTING for valid ranking direct mode", () => {
-    const state = base({
-      mode: "ranking",
-      currentSceneId: null,
-      settingsProbe: probeEmpty,
-    })
-    expect(state.status).toBe("BROADCASTING")
-    expect(state.reason).toBe("DIRECT_MODE")
-  })
-
-  it("returns BROADCASTING for valid media direct mode", () => {
+  it("does not treat valid media settings alone as BROADCASTING", () => {
     const state = base({
       mode: "media_full",
       currentSceneId: null,
@@ -152,24 +154,19 @@ describe("evaluateBroadcastState", () => {
         mediaFullRenderable: true,
       },
     })
-    expect(state.status).toBe("BROADCASTING")
-    expect(state.reason).toBe("DIRECT_MODE")
+    expect(state.status).toBe("WAITING")
+    expect(state.reason).toBe("NO_CURRENT_SCENE")
   })
 
-  it("maps status labels and card classes", () => {
+  it("maps status labels, hints and card classes", () => {
     expect(getBroadcastStatusLabel("BROADCASTING")).toBe("현재 송출 중")
     expect(getBroadcastStatusLabel("WAITING")).toBe("적용된 화면 없음")
+    expect(getBroadcastStatusHint("WAITING")).toContain("Scene 관리")
     expect(
       getBroadcastCardClass("BROADCASTING", {
         displayUnitCardBroadcasting: "on",
         displayUnitCardWaiting: "wait",
       }),
     ).toBe("on")
-    expect(
-      getBroadcastCardClass("WAITING", {
-        displayUnitCardBroadcasting: "on",
-        displayUnitCardWaiting: "wait",
-      }),
-    ).toBe("wait")
   })
 })

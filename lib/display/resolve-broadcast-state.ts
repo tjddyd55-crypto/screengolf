@@ -51,6 +51,7 @@ function buildProbe(input: {
   }
 }
 
+/** 읽기 전용. DB write / migration을 수행하지 않는다. */
 export function getUnitBroadcastState(unitId: number): DisplayBroadcastState {
   const unit = getDisplayUnitById(unitId)
   const settings = getDisplaySettings(unitId)

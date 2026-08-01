@@ -152,15 +152,6 @@ export function resolveDisplayState(unitCode?: string): DisplayStatePayload {
     }
   }
 
-  const direct = resolveFromSource({
-    mode: fresh.mode,
-    notice_id: fresh.active_notice_id,
-    media_full_file_id: fresh.media_full_file_id,
-    media_left_file_id: fresh.media_left_file_id,
-    media_right_file_id: fresh.media_right_file_id,
-  })
-
-  if (direct) return direct
-
+  // Scene-only: direct settings fallback 금지
   return buildWaitingState()
 }

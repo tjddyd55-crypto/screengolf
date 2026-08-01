@@ -7,7 +7,6 @@ export type DisplayBroadcastStatus = "BROADCASTING" | "WAITING"
 
 export type DisplayBroadcastReason =
   | "ACTIVE_SCENE"
-  | "DIRECT_MODE"
   | "NO_ACTIVE_CONTENT"
   | "SCENE_MISSING"
   | "SCENE_INACTIVE"
@@ -55,30 +54,31 @@ function contentRenderableForMode(
   probe: BroadcastContentProbe,
 ): { ok: boolean; reason: DisplayBroadcastReason } {
   if (mode === "ranking") {
-    return { ok: true, reason: "DIRECT_MODE" }
+    return { ok: true, reason: "ACTIVE_SCENE" }
   }
   if (mode === "notice") {
     return probe.noticeRenderable
-      ? { ok: true, reason: "DIRECT_MODE" }
+      ? { ok: true, reason: "ACTIVE_SCENE" }
       : { ok: false, reason: "NOTICE_MISSING" }
   }
   if (mode === "media_full") {
     return probe.mediaFullRenderable
-      ? { ok: true, reason: "DIRECT_MODE" }
+      ? { ok: true, reason: "ACTIVE_SCENE" }
       : { ok: false, reason: "ASSET_MISSING" }
   }
   if (mode === "media_split") {
     return probe.mediaSplitRenderable
-      ? { ok: true, reason: "DIRECT_MODE" }
+      ? { ok: true, reason: "ACTIVE_SCENE" }
       : { ok: false, reason: "ASSET_MISSING" }
   }
   return { ok: false, reason: "NO_ACTIVE_CONTENT" }
 }
 
 /**
- * 송출 상태 SSOT.
- * - BROADCASTING: 렌더 가능한 화면이 적용됨
- * - WAITING: Unit은 있으나 렌더 가능한 화면이 없음
+ * 송출 상태 SSOT (Scene-only).
+ * - BROADCASTING: 유효한 current_scene_id Scene이 적용됨
+ * - WAITING: current_scene_id 없음 또는 Scene/콘텐츠 무효
+ * - raw settings.mode / direct mode만으로는 BROADCASTING 하지 않음
  */
 export function evaluateBroadcastState(input: {
   unitActive?: boolean
@@ -87,6 +87,7 @@ export function evaluateBroadcastState(input: {
   currentSceneId: number | null
   currentScene: BroadcastSceneInput | null
   sceneProbe: BroadcastContentProbe
+  /** @deprecated Scene-only 이후 미사용. 호환을 위해 인자만 유지 */
   settingsProbe: BroadcastContentProbe
 }): DisplayBroadcastState {
   const mode = input.mode
@@ -104,80 +105,7 @@ export function evaluateBroadcastState(input: {
     }
   }
 
-  if (input.currentSceneId != null) {
-    const scene = input.currentScene
-    if (!scene) {
-      return {
-        status: "WAITING",
-        hasRenderableContent: false,
-        currentSceneId: null,
-        currentSceneName: null,
-        mode,
-        modeLabel,
-        reason: "SCENE_MISSING",
-      }
-    }
-    if (scene.display_unit_id !== input.unitId) {
-      return {
-        status: "WAITING",
-        hasRenderableContent: false,
-        currentSceneId: null,
-        currentSceneName: null,
-        mode,
-        modeLabel,
-        reason: "SCENE_UNIT_MISMATCH",
-      }
-    }
-    if (!scene.is_active) {
-      return {
-        status: "WAITING",
-        hasRenderableContent: false,
-        currentSceneId: null,
-        currentSceneName: null,
-        mode,
-        modeLabel,
-        reason: "SCENE_INACTIVE",
-      }
-    }
-
-    const renderable = contentRenderableForMode(scene.mode, input.sceneProbe)
-    if (!renderable.ok) {
-      return {
-        status: "WAITING",
-        hasRenderableContent: false,
-        currentSceneId: scene.id,
-        currentSceneName: scene.name,
-        mode: scene.mode,
-        modeLabel: modeLabelOf(scene.mode),
-        reason: renderable.reason,
-      }
-    }
-
-    return {
-      status: "BROADCASTING",
-      hasRenderableContent: true,
-      currentSceneId: scene.id,
-      currentSceneName: scene.name,
-      mode: scene.mode,
-      modeLabel: modeLabelOf(scene.mode),
-      reason: "ACTIVE_SCENE",
-    }
-  }
-
-  if (!mode) {
-    return {
-      status: "WAITING",
-      hasRenderableContent: false,
-      currentSceneId: null,
-      currentSceneName: null,
-      mode: null,
-      modeLabel: null,
-      reason: "NO_CURRENT_SCENE",
-    }
-  }
-
-  const direct = contentRenderableForMode(mode, input.settingsProbe)
-  if (!direct.ok) {
+  if (input.currentSceneId == null) {
     return {
       status: "WAITING",
       hasRenderableContent: false,
@@ -185,18 +113,66 @@ export function evaluateBroadcastState(input: {
       currentSceneName: null,
       mode,
       modeLabel,
-      reason: direct.reason,
+      reason: "NO_CURRENT_SCENE",
+    }
+  }
+
+  const scene = input.currentScene
+  if (!scene) {
+    return {
+      status: "WAITING",
+      hasRenderableContent: false,
+      currentSceneId: null,
+      currentSceneName: null,
+      mode,
+      modeLabel,
+      reason: "SCENE_MISSING",
+    }
+  }
+  if (scene.display_unit_id !== input.unitId) {
+    return {
+      status: "WAITING",
+      hasRenderableContent: false,
+      currentSceneId: null,
+      currentSceneName: null,
+      mode,
+      modeLabel,
+      reason: "SCENE_UNIT_MISMATCH",
+    }
+  }
+  if (!scene.is_active) {
+    return {
+      status: "WAITING",
+      hasRenderableContent: false,
+      currentSceneId: null,
+      currentSceneName: null,
+      mode,
+      modeLabel,
+      reason: "SCENE_INACTIVE",
+    }
+  }
+
+  const renderable = contentRenderableForMode(scene.mode, input.sceneProbe)
+  if (!renderable.ok) {
+    return {
+      status: "WAITING",
+      hasRenderableContent: false,
+      currentSceneId: scene.id,
+      currentSceneName: scene.name,
+      mode: scene.mode,
+      modeLabel: modeLabelOf(scene.mode),
+      reason: renderable.reason,
     }
   }
 
   return {
     status: "BROADCASTING",
     hasRenderableContent: true,
-    currentSceneId: null,
-    currentSceneName: null,
-    mode,
-    modeLabel,
-    reason: "DIRECT_MODE",
+    currentSceneId: scene.id,
+    currentSceneName: scene.name,
+    mode: scene.mode,
+    modeLabel: modeLabelOf(scene.mode),
+    reason: "ACTIVE_SCENE",
   }
 }
 
@@ -209,7 +185,7 @@ export function getBroadcastStatusHint(status: DisplayBroadcastStatus): string {
   if (status === "BROADCASTING") {
     return "현재 이 전광판 URL에 적용된 화면이 표시되고 있습니다."
   }
-  return "빠른 설정에서 화면을 적용하거나 Scene을 선택해 주세요."
+  return "Scene 관리에서 화면을 선택해 적용해 주세요."
 }
 
 export function getBroadcastCardClass(
