@@ -296,6 +296,18 @@
   border: 1px solid rgba(56, 189, 248, 0.35);
 }
 
+.badgeSelected {
+  background: rgba(148, 163, 184, 0.18);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.badgeScene {
+  background: rgba(251, 191, 36, 0.16);
+  color: #fcd34d;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+}
+
 .cardHeader {
   display: flex;
   align-items: center;

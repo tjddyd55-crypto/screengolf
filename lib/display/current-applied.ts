@@ -2,6 +2,7 @@ import {
   DISPLAY_MODE_LABELS,
   type DisplayMode,
 } from "@/lib/admin/constants"
+import type { DisplayBroadcastStatus } from "@/lib/display/broadcast-state"
 
 export type CurrentAppliedState = {
   isApplied: boolean
@@ -10,15 +11,115 @@ export type CurrentAppliedState = {
   modeLabel: string
 }
 
+export type QuickSettingCardUiState = {
+  /** BROADCASTING + Scene 없음 + resolvedMode 일치 */
+  isDirectApplied: boolean
+  /** 폼에서만 선택됨 (아직 실제 적용 아님) */
+  isSelectedOnly: boolean
+  /** Scene 기반 송출 중이며 Scene mode가 이 카드와 같음 */
+  isSceneModeMatch: boolean
+  badge: "applied" | "selected" | "scene" | null
+  buttonLabel: string
+  emphasizeApplied: boolean
+}
+
 /**
- * 빠른 설정 카드가 현재 전광판에 적용 중인지 판별한다.
- * Scene 적용 여부와 무관하게 settings.mode 기준이다.
+ * raw settings.mode 비교 (저수준).
+ * UI의 "현재 적용 중" 표시에는 사용하지 말고
+ * `resolveQuickSettingCardState` / `isDirectQuickSettingApplied`를 사용한다.
  */
 export function isQuickSettingModeApplied(
   currentMode: DisplayMode | null | undefined,
   cardMode: DisplayMode,
 ): boolean {
   return currentMode === cardMode
+}
+
+/**
+ * 빠른 설정 direct mode가 실제로 송출 중인지 SSOT 기준으로 판정한다.
+ * - WAITING이면 무조건 false (raw mode=ranking 이어도 false)
+ * - Scene 기반 송출이면 false (direct 적용 아님)
+ */
+export function isDirectQuickSettingApplied(input: {
+  broadcastStatus: DisplayBroadcastStatus | null | undefined
+  resolvedMode: DisplayMode | null | undefined
+  currentSceneId: number | null | undefined
+  cardMode: DisplayMode
+}): boolean {
+  if (input.broadcastStatus !== "BROADCASTING") return false
+  if (input.currentSceneId != null) return false
+  return input.resolvedMode === input.cardMode
+}
+
+/**
+ * 빠른 설정 카드 UI 상태.
+ * 실제 적용(B)과 폼 선택(A)을 분리한다.
+ */
+export function resolveQuickSettingCardState(input: {
+  cardMode: DisplayMode
+  broadcastStatus: DisplayBroadcastStatus
+  resolvedMode: DisplayMode | null | undefined
+  currentSceneId: number | null | undefined
+  selectedMode: DisplayMode | null | undefined
+}): QuickSettingCardUiState {
+  const isDirectApplied = isDirectQuickSettingApplied({
+    broadcastStatus: input.broadcastStatus,
+    resolvedMode: input.resolvedMode,
+    currentSceneId: input.currentSceneId,
+    cardMode: input.cardMode,
+  })
+
+  const isSceneModeMatch =
+    input.broadcastStatus === "BROADCASTING" &&
+    input.currentSceneId != null &&
+    input.resolvedMode === input.cardMode
+
+  const isSelectedOnly =
+    !isDirectApplied &&
+    !isSceneModeMatch &&
+    input.selectedMode === input.cardMode
+
+  if (isDirectApplied) {
+    return {
+      isDirectApplied: true,
+      isSelectedOnly: false,
+      isSceneModeMatch: false,
+      badge: "applied",
+      buttonLabel: "적용 중",
+      emphasizeApplied: true,
+    }
+  }
+
+  if (isSceneModeMatch) {
+    return {
+      isDirectApplied: false,
+      isSelectedOnly: false,
+      isSceneModeMatch: true,
+      badge: "scene",
+      buttonLabel: "적용",
+      emphasizeApplied: false,
+    }
+  }
+
+  if (isSelectedOnly) {
+    return {
+      isDirectApplied: false,
+      isSelectedOnly: true,
+      isSceneModeMatch: false,
+      badge: "selected",
+      buttonLabel: "적용",
+      emphasizeApplied: false,
+    }
+  }
+
+  return {
+    isDirectApplied: false,
+    isSelectedOnly: false,
+    isSceneModeMatch: false,
+    badge: null,
+    buttonLabel: "적용",
+    emphasizeApplied: false,
+  }
 }
 
 export function isSceneCurrentlyApplied(

@@ -8,7 +8,10 @@ import {
   type DisplayMode,
 } from "@/lib/admin/constants"
 import ScenePreviewFrame from "@/components/display/ScenePreviewFrame"
-import { isQuickSettingModeApplied } from "@/lib/display/current-applied"
+import {
+  resolveQuickSettingCardState,
+  type QuickSettingCardUiState,
+} from "@/lib/display/current-applied"
 import {
   getBroadcastStatusHint,
   getBroadcastStatusLabel,
@@ -112,6 +115,31 @@ async function uploadDisplayAsset(
   }
 
   return normalizeAsset(json.asset)
+}
+
+function cardBadge(state: QuickSettingCardUiState) {
+  if (state.badge === "applied") {
+    return (
+      <span className={`${styles.badge} ${styles.badgeApplied}`}>
+        현재 적용 중
+      </span>
+    )
+  }
+  if (state.badge === "selected") {
+    return (
+      <span className={`${styles.badge} ${styles.badgeSelected}`}>
+        선택됨
+      </span>
+    )
+  }
+  if (state.badge === "scene") {
+    return (
+      <span className={`${styles.badge} ${styles.badgeScene}`}>
+        Scene에서 사용 중
+      </span>
+    )
+  }
+  return null
 }
 
 function UploadHint({
@@ -309,8 +337,29 @@ export default function AdminDisplayPage({ params }: PageProps) {
         return
       }
 
-      setSettings(json.data ?? null)
-      setSelectedMode(payload.mode)
+      // 적용 성공 후 서버 SSOT(broadcast_status 포함)를 그대로 반영한다.
+      // 로컬 selectedMode만으로 "현재 적용 중"을 만들지 않는다.
+      const next = json.data ?? null
+      setSettings(next)
+      if (next) {
+        setSelectedMode(next.mode)
+        setActiveNoticeId(next.active_notice_id ?? "")
+        setFullAsset(
+          next.media_full_asset
+            ? normalizeAsset(next.media_full_asset)
+            : null,
+        )
+        setLeftAsset(
+          next.media_left_asset
+            ? normalizeAsset(next.media_left_asset)
+            : null,
+        )
+        setRightAsset(
+          next.media_right_asset
+            ? normalizeAsset(next.media_right_asset)
+            : null,
+        )
+      }
       setMessage("전광판 설정이 적용되었습니다. 30초 이내에 반영됩니다.")
     } catch {
       setApplyError("적용 중 오류가 발생했습니다.")
@@ -366,16 +415,44 @@ export default function AdminDisplayPage({ params }: PageProps) {
 
   const broadcastStatus = settings?.broadcast_status ?? "WAITING"
   const isBroadcasting = broadcastStatus === "BROADCASTING"
+  const currentSceneId =
+    settings?.current_scene_id ?? settings?.current_scene?.id ?? null
+  const isSceneBroadcasting = isBroadcasting && currentSceneId != null
   const currentSceneLabel =
-    settings?.current_scene_name ?? settings?.current_scene?.name
+    settings?.current_scene_name ?? settings?.current_scene?.name ?? null
+  const resolvedMode = settings?.mode ?? null
   const currentModeLabel =
     settings?.mode_label ??
-    (settings ? DISPLAY_MODE_LABELS[settings.mode] : "랭킹 화면")
-  const appliedMode = settings?.mode ?? null
-  const rankingApplied = isQuickSettingModeApplied(appliedMode, "ranking")
-  const fullApplied = isQuickSettingModeApplied(appliedMode, "media_full")
-  const splitApplied = isQuickSettingModeApplied(appliedMode, "media_split")
-  const noticeApplied = isQuickSettingModeApplied(appliedMode, "notice")
+    (resolvedMode ? DISPLAY_MODE_LABELS[resolvedMode] : "랭킹 화면")
+
+  const rankingCard = resolveQuickSettingCardState({
+    cardMode: "ranking",
+    broadcastStatus,
+    resolvedMode,
+    currentSceneId,
+    selectedMode,
+  })
+  const fullCard = resolveQuickSettingCardState({
+    cardMode: "media_full",
+    broadcastStatus,
+    resolvedMode,
+    currentSceneId,
+    selectedMode,
+  })
+  const splitCard = resolveQuickSettingCardState({
+    cardMode: "media_split",
+    broadcastStatus,
+    resolvedMode,
+    currentSceneId,
+    selectedMode,
+  })
+  const noticeCard = resolveQuickSettingCardState({
+    cardMode: "notice",
+    broadcastStatus,
+    resolvedMode,
+    currentSceneId,
+    selectedMode,
+  })
 
   const canApplyFull = isUsableAsset(fullAsset)
   const canApplySplit = isUsableAsset(leftAsset) && isUsableAsset(rightAsset)
@@ -386,6 +463,12 @@ export default function AdminDisplayPage({ params }: PageProps) {
   const liveClass = isBroadcasting
     ? styles.liveStatus
     : `${styles.liveStatus} ${styles.liveStatusWaiting}`
+
+  const bannerLiveLabel = isSceneBroadcasting
+    ? "현재 Scene 적용 중"
+    : isBroadcasting
+      ? "현재 적용 중"
+      : (settings?.broadcast_label ?? getBroadcastStatusLabel(broadcastStatus))
 
   return (
     <>
@@ -409,19 +492,26 @@ export default function AdminDisplayPage({ params }: PageProps) {
       >
         <p className={liveClass}>
           <span className={styles.liveStatusDot} aria-hidden="true" />
-          {settings?.broadcast_label ??
-            getBroadcastStatusLabel(broadcastStatus)}
+          {bannerLiveLabel}
         </p>
-        {isBroadcasting ? (
+        {isSceneBroadcasting ? (
           <>
-            <p className={styles.appliedMetaLine}>
-              {getBroadcastStatusHint("BROADCASTING")}
-            </p>
             <p className={styles.appliedLabel}>현재 적용 화면</p>
             <p className={styles.appliedSceneName}>
               {currentSceneLabel ?? currentModeLabel}
             </p>
             <p className={styles.appliedModeLine}>{currentModeLabel}</p>
+            <p className={styles.appliedMetaLine}>
+              Scene 관리에서 적용된 화면입니다.
+            </p>
+          </>
+        ) : isBroadcasting ? (
+          <>
+            <p className={styles.appliedMetaLine}>
+              현재 이 전광판 URL에 {currentModeLabel}이 표시되고 있습니다.
+            </p>
+            <p className={styles.appliedLabel}>현재 적용 화면</p>
+            <p className={styles.appliedSceneName}>{currentModeLabel}</p>
           </>
         ) : (
           <>
@@ -450,18 +540,14 @@ export default function AdminDisplayPage({ params }: PageProps) {
       <div className={styles.displayGrid}>
         <div
           className={`${styles.card} ${styles.cardStatic} ${
-            rankingApplied ? styles.cardApplied : ""
+            rankingCard.emphasizeApplied ? styles.cardApplied : ""
           }`}
         >
           <div className={styles.cardHeader}>
             <h3 className={styles.cardTitle}>랭킹 화면</h3>
-            {rankingApplied ? (
-              <span className={`${styles.badge} ${styles.badgeApplied}`}>
-                현재 적용 중
-              </span>
-            ) : null}
+            {cardBadge(rankingCard)}
           </div>
-          {rankingApplied ? (
+          {rankingCard.isDirectApplied ? (
             <p className={styles.modeCheckMark}>✓ 현재 적용 중</p>
           ) : null}
           <p className={styles.cardDesc}>기존 월간 랭킹 전광판을 표시합니다.</p>
@@ -472,28 +558,24 @@ export default function AdminDisplayPage({ params }: PageProps) {
             <button
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
-              disabled={applying || rankingApplied}
+              disabled={applying || rankingCard.isDirectApplied}
               onClick={handleApplyRanking}
             >
-              {rankingApplied ? "적용 중" : "적용"}
+              {rankingCard.buttonLabel}
             </button>
           </div>
         </div>
 
         <div
           className={`${styles.card} ${styles.cardStatic} ${
-            fullApplied ? styles.cardApplied : ""
+            fullCard.emphasizeApplied ? styles.cardApplied : ""
           }`}
         >
           <div className={styles.cardHeader}>
             <h3 className={styles.cardTitle}>가로 전체 화면</h3>
-            {fullApplied ? (
-              <span className={`${styles.badge} ${styles.badgeApplied}`}>
-                현재 적용 중
-              </span>
-            ) : null}
+            {cardBadge(fullCard)}
           </div>
-          {fullApplied ? (
+          {fullCard.isDirectApplied ? (
             <p className={styles.modeCheckMark}>✓ 현재 적용 중</p>
           ) : null}
           <p className={styles.cardDesc}>
@@ -525,28 +607,24 @@ export default function AdminDisplayPage({ params }: PageProps) {
             <button
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
-              disabled={applying || !canApplyFull || fullApplied}
+              disabled={applying || !canApplyFull || fullCard.isDirectApplied}
               onClick={handleApplyMediaFull}
             >
-              {fullApplied ? "적용 중" : "적용"}
+              {fullCard.buttonLabel}
             </button>
           </div>
         </div>
 
         <div
           className={`${styles.card} ${styles.cardStatic} ${
-            splitApplied ? styles.cardApplied : ""
+            splitCard.emphasizeApplied ? styles.cardApplied : ""
           }`}
         >
           <div className={styles.cardHeader}>
             <h3 className={styles.cardTitle}>세로 2분할 화면</h3>
-            {splitApplied ? (
-              <span className={`${styles.badge} ${styles.badgeApplied}`}>
-                현재 적용 중
-              </span>
-            ) : null}
+            {cardBadge(splitCard)}
           </div>
-          {splitApplied ? (
+          {splitCard.isDirectApplied ? (
             <p className={styles.modeCheckMark}>✓ 현재 적용 중</p>
           ) : null}
           <p className={styles.cardDesc}>
@@ -595,28 +673,24 @@ export default function AdminDisplayPage({ params }: PageProps) {
             <button
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
-              disabled={applying || !canApplySplit || splitApplied}
+              disabled={applying || !canApplySplit || splitCard.isDirectApplied}
               onClick={handleApplyMediaSplit}
             >
-              {splitApplied ? "적용 중" : "적용"}
+              {splitCard.buttonLabel}
             </button>
           </div>
         </div>
 
         <div
           className={`${styles.card} ${styles.cardStatic} ${
-            noticeApplied ? styles.cardApplied : ""
+            noticeCard.emphasizeApplied ? styles.cardApplied : ""
           }`}
         >
           <div className={styles.cardHeader}>
             <h3 className={styles.cardTitle}>공지사항</h3>
-            {noticeApplied ? (
-              <span className={`${styles.badge} ${styles.badgeApplied}`}>
-                현재 적용 중
-              </span>
-            ) : null}
+            {cardBadge(noticeCard)}
           </div>
-          {noticeApplied ? (
+          {noticeCard.isDirectApplied ? (
             <p className={styles.modeCheckMark}>✓ 현재 적용 중</p>
           ) : null}
           <p className={styles.cardDesc}>텍스트 공지 화면을 표시합니다.</p>
@@ -650,10 +724,10 @@ export default function AdminDisplayPage({ params }: PageProps) {
             <button
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
-              disabled={applying || noticeApplied}
+              disabled={applying || noticeCard.isDirectApplied}
               onClick={handleApplyNotice}
             >
-              {noticeApplied ? "적용 중" : "적용"}
+              {noticeCard.buttonLabel}
             </button>
           </div>
         </div>

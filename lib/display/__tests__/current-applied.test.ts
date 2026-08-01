@@ -3,10 +3,13 @@ import {
   formatCurrentAppliedSceneLabel,
   formatSettingsUpdatedAt,
   getDisplayModeLabel,
+  isDirectQuickSettingApplied,
   isQuickSettingModeApplied,
   isSceneCurrentlyApplied,
   resolveCurrentAppliedState,
+  resolveQuickSettingCardState,
 } from "@/lib/display/current-applied"
+import { getBroadcastStatusLabel } from "@/lib/display/broadcast-state"
 import {
   isProtectedDisplayUnitCode,
   protectedUnitDeleteErrorMessage,
@@ -95,6 +98,154 @@ describe("current-applied helpers", () => {
     expect(formatSettingsUpdatedAt("2026-07-24 09:00:00", now)).toBe("3시간 전")
     expect(formatSettingsUpdatedAt("not-a-date", now)).toBeNull()
     expect(formatSettingsUpdatedAt(null, now)).toBeNull()
+  })
+})
+
+describe("quick setting card SSOT mapper", () => {
+  it("WAITING + raw mode=ranking → 현재 적용 중 아님, 버튼 적용", () => {
+    const card = resolveQuickSettingCardState({
+      cardMode: "ranking",
+      broadcastStatus: "WAITING",
+      resolvedMode: "ranking",
+      currentSceneId: null,
+      selectedMode: null,
+    })
+    expect(card.isDirectApplied).toBe(false)
+    expect(card.badge).toBeNull()
+    expect(card.buttonLabel).toBe("적용")
+    expect(card.emphasizeApplied).toBe(false)
+    expect(
+      isDirectQuickSettingApplied({
+        broadcastStatus: "WAITING",
+        resolvedMode: "ranking",
+        currentSceneId: null,
+        cardMode: "ranking",
+      }),
+    ).toBe(false)
+  })
+
+  it("BROADCASTING + direct ranking → 현재 적용 중", () => {
+    const card = resolveQuickSettingCardState({
+      cardMode: "ranking",
+      broadcastStatus: "BROADCASTING",
+      resolvedMode: "ranking",
+      currentSceneId: null,
+      selectedMode: "ranking",
+    })
+    expect(card.isDirectApplied).toBe(true)
+    expect(card.badge).toBe("applied")
+    expect(card.buttonLabel).toBe("적용 중")
+    expect(card.emphasizeApplied).toBe(true)
+  })
+
+  it("BROADCASTING + Scene media_split → direct 적용 아님, scene badge", () => {
+    const split = resolveQuickSettingCardState({
+      cardMode: "media_split",
+      broadcastStatus: "BROADCASTING",
+      resolvedMode: "media_split",
+      currentSceneId: 12,
+      selectedMode: "media_split",
+    })
+    expect(split.isDirectApplied).toBe(false)
+    expect(split.isSceneModeMatch).toBe(true)
+    expect(split.badge).toBe("scene")
+    expect(split.buttonLabel).toBe("적용")
+    expect(split.emphasizeApplied).toBe(false)
+
+    const ranking = resolveQuickSettingCardState({
+      cardMode: "ranking",
+      broadcastStatus: "BROADCASTING",
+      resolvedMode: "media_split",
+      currentSceneId: 12,
+      selectedMode: "media_split",
+    })
+    expect(ranking.isDirectApplied).toBe(false)
+    expect(ranking.badge).toBeNull()
+  })
+
+  it("selectedMode=ranking + SSOT WAITING → 선택됨, 현재 적용 중 금지", () => {
+    const card = resolveQuickSettingCardState({
+      cardMode: "ranking",
+      broadcastStatus: "WAITING",
+      resolvedMode: "ranking",
+      currentSceneId: null,
+      selectedMode: "ranking",
+    })
+    expect(card.isDirectApplied).toBe(false)
+    expect(card.isSelectedOnly).toBe(true)
+    expect(card.badge).toBe("selected")
+    expect(card.buttonLabel).toBe("적용")
+  })
+
+  it("적용 성공 후 새 SSOT BROADCASTING 반영", () => {
+    const before = resolveQuickSettingCardState({
+      cardMode: "ranking",
+      broadcastStatus: "WAITING",
+      resolvedMode: "ranking",
+      currentSceneId: null,
+      selectedMode: "ranking",
+    })
+    expect(before.isDirectApplied).toBe(false)
+
+    const after = resolveQuickSettingCardState({
+      cardMode: "ranking",
+      broadcastStatus: "BROADCASTING",
+      resolvedMode: "ranking",
+      currentSceneId: null,
+      selectedMode: "ranking",
+    })
+    expect(after.isDirectApplied).toBe(true)
+    expect(after.badge).toBe("applied")
+  })
+
+  it("적용 실패 또는 콘텐츠 무효 시 WAITING 유지", () => {
+    const card = resolveQuickSettingCardState({
+      cardMode: "media_full",
+      broadcastStatus: "WAITING",
+      resolvedMode: "media_full",
+      currentSceneId: null,
+      selectedMode: "media_full",
+    })
+    expect(card.isDirectApplied).toBe(false)
+    expect(card.badge).toBe("selected")
+    expect(card.buttonLabel).toBe("적용")
+  })
+
+  it("관리자 홈과 빠른 설정에 같은 broadcastStatus면 label 일치", () => {
+    expect(getBroadcastStatusLabel("WAITING")).toBe("적용된 화면 없음")
+    expect(getBroadcastStatusLabel("BROADCASTING")).toBe("현재 송출 중")
+  })
+
+  it("raw mode만으로 BROADCASTING 처리하지 않음", () => {
+    expect(
+      isDirectQuickSettingApplied({
+        broadcastStatus: "WAITING",
+        resolvedMode: "ranking",
+        currentSceneId: null,
+        cardMode: "ranking",
+      }),
+    ).toBe(false)
+    expect(isQuickSettingModeApplied("ranking", "ranking")).toBe(true)
+  })
+
+  it("display-1 Scene 더위사냥 형태는 direct ranking 적용으로 표시하지 않음", () => {
+    const ranking = resolveQuickSettingCardState({
+      cardMode: "ranking",
+      broadcastStatus: "BROADCASTING",
+      resolvedMode: "media_split",
+      currentSceneId: 1,
+      selectedMode: "media_split",
+    })
+    const split = resolveQuickSettingCardState({
+      cardMode: "media_split",
+      broadcastStatus: "BROADCASTING",
+      resolvedMode: "media_split",
+      currentSceneId: 1,
+      selectedMode: "media_split",
+    })
+    expect(ranking.isDirectApplied).toBe(false)
+    expect(split.isDirectApplied).toBe(false)
+    expect(split.badge).toBe("scene")
   })
 })
 
