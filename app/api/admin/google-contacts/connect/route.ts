@@ -9,13 +9,16 @@ import { getGoogleContactsEnv } from "@/lib/google-contacts/google-contacts-env"
 
 export const dynamic = "force-dynamic"
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     getGoogleContactsEnv()
     assertTokenEncryptionConfigured()
 
+    const { searchParams } = new URL(request.url)
+    const forceConsent = searchParams.get("reconnect") === "1"
+
     const state = createOAuthState()
-    const url = buildGoogleAuthUrl(state)
+    const url = buildGoogleAuthUrl(state, { forceConsent })
 
     const response = NextResponse.redirect(url)
     response.cookies.set(OAUTH_STATE_COOKIE, state, {

@@ -5,14 +5,27 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import styles from "../../admin.module.css"
 
+type GoogleConnectionState =
+  | "connected"
+  | "refreshing"
+  | "reauth_required"
+  | "transient_error"
+  | "sync_failed"
+  | "not_connected"
+  | "config_error"
+  | "crypto_error"
+
 type GoogleStatus = {
   connected: boolean
+  connectionState: GoogleConnectionState
+  connectionMessage: string
   accountEmail: string | null
   groupName: string | null
   connectedAt: string | null
   lastSyncedAt: string | null
   lastSyncStatus: string | null
   lastSyncMessage: string | null
+  hasRefreshToken: boolean
 }
 
 type Contact = {
@@ -114,17 +127,21 @@ function GoogleContactsPageInner() {
 
   const loadGoogleStatus = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/google-contacts/status")
+      const res = await fetch("/api/admin/google-contacts/status?probe=1")
       const json = (await res.json()) as GoogleStatus & { success?: boolean }
       if (json.success === false) return
       setGoogleStatus({
         connected: Boolean(json.connected),
+        connectionState: json.connectionState ?? "not_connected",
+        connectionMessage:
+          json.connectionMessage ?? "Google 연결 상태를 확인할 수 없습니다.",
         accountEmail: json.accountEmail ?? null,
         groupName: json.groupName ?? null,
         connectedAt: json.connectedAt ?? null,
         lastSyncedAt: json.lastSyncedAt ?? null,
         lastSyncStatus: json.lastSyncStatus ?? null,
         lastSyncMessage: json.lastSyncMessage ?? null,
+        hasRefreshToken: Boolean(json.hasRefreshToken),
       })
     } catch {
       // ignore
@@ -268,14 +285,16 @@ function GoogleContactsPageInner() {
     setMessage("대상함을 비웠습니다.")
   }
 
-  async function handleSync() {
+  async function runSyncRequest(dryRun: boolean) {
     setSyncing(true)
     setError("")
     setMessage("")
-    setSyncSummary(null)
+    if (!dryRun) setSyncSummary(null)
     try {
       const res = await fetch("/api/admin/google-contacts/sync", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dryRun }),
       })
       const json = (await res.json()) as SyncSummary & {
         success?: boolean
@@ -283,25 +302,42 @@ function GoogleContactsPageInner() {
       }
       if (!res.ok || !json.success) {
         setError(json.error ?? "동기화에 실패했습니다.")
+        await loadGoogleStatus()
         return
       }
-      setSyncSummary({
-        created: json.created,
-        updated: json.updated,
-        unchanged: json.unchanged,
-        skipped: json.skipped,
-        conflicts: json.conflicts,
-        removedFromGroup: json.removedFromGroup,
-        googleContactCount: json.googleContactCount,
-        message: json.message,
-      })
-      setMessage(json.message ?? "동기화가 완료되었습니다.")
-      await Promise.all([loadContacts(), loadGoogleStatus()])
+      if (dryRun) {
+        setMessage(
+          json.message ??
+            `미리보기: Google에서 ${json.googleContactCount ?? "-"}명 조회됨`,
+        )
+      } else {
+        setSyncSummary({
+          created: json.created,
+          updated: json.updated,
+          unchanged: json.unchanged,
+          skipped: json.skipped,
+          conflicts: json.conflicts,
+          removedFromGroup: json.removedFromGroup,
+          googleContactCount: json.googleContactCount,
+          message: json.message,
+        })
+        setMessage(json.message ?? "동기화가 완료되었습니다.")
+        await loadContacts()
+      }
+      await loadGoogleStatus()
     } catch {
       setError("동기화 중 오류가 발생했습니다.")
     } finally {
       setSyncing(false)
     }
+  }
+
+  function handleSync() {
+    return runSyncRequest(false)
+  }
+
+  function handleDryRun() {
+    return runSyncRequest(true)
   }
 
   async function handleDisconnect() {
@@ -380,6 +416,17 @@ function GoogleContactsPageInner() {
     ? `'${googleStatus.groupName}'`
     : "설정된"
 
+  const needsReconnect =
+    googleStatus?.connectionState === "reauth_required" ||
+    googleStatus?.connectionState === "crypto_error"
+  const connectionBannerClass =
+    googleStatus?.connectionState === "connected"
+      ? styles.messageSuccess
+      : googleStatus?.connectionState === "transient_error" ||
+          googleStatus?.connectionState === "refreshing"
+        ? styles.message
+        : styles.messageError
+
   return (
     <>
       <Link href="/admin" className={styles.backLink}>
@@ -402,18 +449,21 @@ function GoogleContactsPageInner() {
               Google 연락처의 {labelHint} 라벨 고객을 불러옵니다.
             </p>
             <div className={styles.googleActions}>
-              <a
+              <Link
                 href="/api/admin/google-contacts/connect"
                 className={`${styles.btn} ${styles.btnPrimary}`}
               >
                 Google 계정 연결
-              </a>
+              </Link>
             </div>
           </>
         ) : (
           <>
+            <div className={`${styles.message} ${connectionBannerClass}`}>
+              {googleStatus.connectionMessage}
+            </div>
             <p className={styles.googleMeta}>
-              연결 계정: {googleStatus.accountEmail ?? "-"}
+              연결 계정: {googleStatus.accountEmail ?? "표시되지 않음"}
             </p>
             <p className={styles.googleMeta}>
               대상 라벨: {googleStatus.groupName ?? "-"}
@@ -428,14 +478,33 @@ function GoogleContactsPageInner() {
                 "-"}
             </p>
             <div className={styles.googleActions}>
-              <button
-                type="button"
-                className={`${styles.btn} ${styles.btnPrimary}`}
-                disabled={syncing}
-                onClick={handleSync}
-              >
-                {syncing ? "동기화 중..." : "지금 동기화"}
-              </button>
+              {needsReconnect ? (
+                <Link
+                  href="/api/admin/google-contacts/connect?reconnect=1"
+                  className={`${styles.btn} ${styles.btnPrimary}`}
+                >
+                  Google 계정 재연결
+                </Link>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className={`${styles.btn} ${styles.btnPrimary}`}
+                    disabled={syncing}
+                    onClick={handleSync}
+                  >
+                    {syncing ? "동기화 중..." : "지금 동기화"}
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.btn} ${styles.btnSecondary}`}
+                    disabled={syncing}
+                    onClick={handleDryRun}
+                  >
+                    {syncing ? "확인 중..." : "연결 미리보기"}
+                  </button>
+                </>
+              )}
               <button
                 type="button"
                 className={`${styles.btn} ${styles.btnDanger}`}

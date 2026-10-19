@@ -18,6 +18,7 @@ import {
   listGroupMemberResourceNames,
 } from "@/lib/google-contacts/google-people-client"
 import { getValidAccessToken } from "@/lib/google-contacts/google-oauth"
+import { isGoogleContactsAuthError } from "@/lib/google-contacts/google-oauth-errors"
 
 export type GoogleSyncResult = {
   success: boolean
@@ -42,7 +43,13 @@ export function isGoogleSyncRunning(): boolean {
   return syncRunning
 }
 
-export async function runGoogleContactsSync(): Promise<GoogleSyncResult> {
+export type GoogleSyncOptions = {
+  dryRun?: boolean
+}
+
+export async function runGoogleContactsSync(
+  options: GoogleSyncOptions = {},
+): Promise<GoogleSyncResult> {
   if (syncRunning) {
     throw new Error("이미 동기화가 진행 중입니다. 잠시 후 다시 시도해 주세요.")
   }
@@ -62,6 +69,27 @@ export async function runGoogleContactsSync(): Promise<GoogleSyncResult> {
     const group = await findContactGroupByExactName(env.groupName)
     const memberNames = await listGroupMemberResourceNames(group.resourceName)
     const people = await batchGetPeople(memberNames)
+
+    if (options.dryRun) {
+      const completedAt = new Date().toISOString()
+      const message = `미리보기: Google '${env.groupName}' 라벨 ${people.length}명 조회됨 (DB 변경 없음)`
+      return {
+        success: true,
+        groupName: env.groupName,
+        groupResourceName: group.resourceName,
+        googleContactCount: people.length,
+        created: 0,
+        updated: 0,
+        unchanged: 0,
+        skipped: 0,
+        conflicts: 0,
+        failed: 0,
+        removedFromGroup: 0,
+        completedAt,
+        status: "success",
+        message,
+      }
+    }
 
     let created = 0
     let updated = 0
@@ -182,8 +210,11 @@ export async function runGoogleContactsSync(): Promise<GoogleSyncResult> {
     }
   } catch (error) {
     const completedAt = new Date().toISOString()
-    const message =
-      error instanceof Error ? error.message : "동기화에 실패했습니다."
+    const message = isGoogleContactsAuthError(error)
+      ? error.message
+      : error instanceof Error
+        ? error.message
+        : "동기화에 실패했습니다."
 
     insertGoogleContactsSyncLog({
       started_at: startedAt,

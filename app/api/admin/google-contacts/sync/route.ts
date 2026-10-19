@@ -3,10 +3,20 @@ import {
   isGoogleSyncRunning,
   runGoogleContactsSync,
 } from "@/lib/google-contacts/google-contact-sync"
+import {
+  isGoogleContactsAuthError,
+  type GoogleConnectionState,
+} from "@/lib/google-contacts/google-oauth-errors"
 
 export const dynamic = "force-dynamic"
 
-export async function POST() {
+function httpStatusForAuthState(state: GoogleConnectionState): number {
+  if (state === "transient_error") return 503
+  if (state === "not_connected" || state === "config_error") return 400
+  return 400
+}
+
+export async function POST(request: Request) {
   try {
     if (isGoogleSyncRunning()) {
       return NextResponse.json(
@@ -18,7 +28,15 @@ export async function POST() {
       )
     }
 
-    const result = await runGoogleContactsSync()
+    let dryRun = false
+    try {
+      const body = (await request.json()) as { dryRun?: boolean }
+      dryRun = body.dryRun === true
+    } catch {
+      dryRun = false
+    }
+
+    const result = await runGoogleContactsSync({ dryRun })
     return NextResponse.json({
       success: true,
       groupName: result.groupName,
@@ -37,9 +55,15 @@ export async function POST() {
     console.error("[google-contacts/sync] failed:", error)
     const message =
       error instanceof Error ? error.message : "동기화에 실패했습니다."
+    const connectionState = isGoogleContactsAuthError(error)
+      ? error.state
+      : undefined
+    const status = connectionState
+      ? httpStatusForAuthState(connectionState)
+      : 400
     return NextResponse.json(
-      { success: false, error: message },
-      { status: 400 },
+      { success: false, error: message, connectionState },
+      { status },
     )
   }
 }

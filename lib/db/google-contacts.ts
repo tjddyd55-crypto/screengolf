@@ -109,6 +109,19 @@ export function updateGoogleContactsAccessToken(
     .run(encryptToken(accessToken), expiresAt, connectionId)
 }
 
+export function updateGoogleContactsRefreshToken(
+  connectionId: number,
+  refreshToken: string,
+): void {
+  getDb()
+    .prepare(
+      `UPDATE google_contacts_connections
+       SET refresh_token_encrypted = ?, updated_at = datetime('now')
+       WHERE id = ?`,
+    )
+    .run(encryptToken(refreshToken), connectionId)
+}
+
 export function updateGoogleContactsLastSync(
   connectionId: number,
   status: string,

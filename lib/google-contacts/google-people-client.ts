@@ -1,4 +1,5 @@
 import { GOOGLE_PEOPLE_API_BASE } from "@/lib/google-contacts/google-contacts-env"
+import { GoogleContactsAuthError } from "@/lib/google-contacts/google-oauth-errors"
 import { getValidAccessToken } from "@/lib/google-contacts/google-oauth"
 
 async function peopleFetch(
@@ -6,13 +7,31 @@ async function peopleFetch(
   init?: RequestInit,
 ): Promise<Response> {
   const accessToken = await getValidAccessToken()
-  return fetch(`${GOOGLE_PEOPLE_API_BASE}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      ...(init?.headers ?? {}),
-    },
-  })
+  let res: Response
+  try {
+    res = await fetch(`${GOOGLE_PEOPLE_API_BASE}${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...(init?.headers ?? {}),
+      },
+    })
+  } catch {
+    throw new GoogleContactsAuthError(
+      "Google 연결 중 일시적인 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+      "transient_error",
+    )
+  }
+
+  if (res.status === 429 || res.status >= 500) {
+    throw new GoogleContactsAuthError(
+      "Google 연결 중 일시적인 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+      "transient_error",
+      `http_${res.status}`,
+    )
+  }
+
+  return res
 }
 
 export type ContactGroupSummary = {
@@ -42,7 +61,11 @@ export async function listContactGroups(): Promise<ContactGroupSummary[]> {
 
     const res = await peopleFetch(`/contactGroups?${params.toString()}`)
     if (!res.ok) {
-      throw new Error("Google 연락처 그룹 목록 조회에 실패했습니다.")
+      throw new GoogleContactsAuthError(
+        "Google 연락처 그룹 목록 조회에 실패했습니다.",
+        res.status === 401 || res.status === 403 ? "reauth_required" : "transient_error",
+        `http_${res.status}`,
+      )
     }
 
     const json = (await res.json()) as ContactGroupsListResponse
@@ -104,9 +127,13 @@ export async function listGroupMemberResourceNames(
     })
     if (pageToken) params.set("pageToken", pageToken)
 
-const res = await peopleFetch(`/${groupResourceName}?${params.toString()}`)
+    const res = await peopleFetch(`/${groupResourceName}?${params.toString()}`)
     if (!res.ok) {
-      throw new Error("Google 연락처 그룹 멤버 조회에 실패했습니다.")
+      throw new GoogleContactsAuthError(
+        "Google 연락처 그룹 멤버 조회에 실패했습니다.",
+        res.status === 401 || res.status === 403 ? "reauth_required" : "transient_error",
+        `http_${res.status}`,
+      )
     }
 
     const json = (await res.json()) as ContactGroupGetResponse
@@ -163,7 +190,11 @@ export async function batchGetPeople(
 
     const res = await peopleFetch(`/people:batchGet?${params.toString()}`)
     if (!res.ok) {
-      throw new Error("Google 연락처 상세 조회에 실패했습니다.")
+      throw new GoogleContactsAuthError(
+        "Google 연락처 상세 조회에 실패했습니다.",
+        res.status === 401 || res.status === 403 ? "reauth_required" : "transient_error",
+        `http_${res.status}`,
+      )
     }
 
     const json = (await res.json()) as BatchGetResponse
